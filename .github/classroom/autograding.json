@@ -1,0 +1,34 @@
+{
+  "tests": [
+    {
+      "name": "Bundle 1 - Core Requirements (C Grade)",
+      "setup": "pip install -r requirements.txt && cp template/*.py src/",
+      "run": "python -m pytest tests/ -m 'bundle(1)' -v",
+      "input": "",
+      "output": "",
+      "comparison": "included",
+      "timeout": 3,
+      "points": 70
+    },
+    {
+      "name": "Bundle 2 - Intermediate Features (B Grade)",
+      "setup": "",
+      "run": "python -m pytest tests/ -m 'bundle(2)' -v",
+      "input": "",
+      "output": "",
+      "comparison": "included",
+      "timeout": 3,
+      "points": 15
+    },
+    {
+      "name": "Bundle 3 - Advanced Features (A Grade)",
+      "setup": "",
+      "run": "python -m pytest tests/ -m 'bundle(3)' -v",
+      "input": "",
+      "output": "",
+      "comparison": "included",
+      "timeout": 3,
+      "points": 15
+    }
+  ]
+}
