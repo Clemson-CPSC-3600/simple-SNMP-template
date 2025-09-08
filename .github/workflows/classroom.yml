@@ -28,11 +28,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
       
-      - name: Copy template files to src
+      - name: Check if students copied files to src
         run: |
-          cp template/*.py src/
-          echo "Files copied to src:"
-          ls -la src/
+          echo "Checking src directory contents..."
+          if [ -z "$(ls -A src/*.py 2>/dev/null)" ]; then
+            echo "❌ ERROR: No Python files found in src/ directory!"
+            echo "Did you forget to copy the template files?"
+            echo "Run: cp template/*.py src/"
+            exit 1
+          fi
+          echo "✅ Found Python files in src/:"
+          ls -la src/*.py
       
       - name: Run tests with grading script
         run: |

@@ -2,7 +2,7 @@
   "tests": [
     {
       "name": "Bundle 1 - Core Requirements (C Grade)",
-      "setup": "pip install -r requirements.txt && cp template/*.py src/",
+      "setup": "pip install -r requirements.txt",
       "run": "python -m pytest tests/ -m 'bundle(1)' -v",
       "input": "",
       "output": "",
