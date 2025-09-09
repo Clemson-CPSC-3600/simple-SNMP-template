@@ -1201,25 +1201,12 @@ assert original == decoded, f"Round-trip failed: {original} != {decoded}"
 
 # 10. Submission Requirements
 
-## Required Files
-
-Submit these files to the autograder:
-
-1. **snmp_protocol.py** - Protocol encoding/decoding implementation
-2. **snmp_agent.py** - SNMP server implementation  
-3. **snmp_manager.py** - SNMP client implementation
-
-**Do NOT submit:**
-- `mib_database.py` (provided, do not modify)
-- Test files
-- Virtual environment files
-- `__pycache__` directories
+Github Classroom will automatically grade your assignment when you commit and push changes back to remote. Make sure you commit your changes AND push them when you have made progress and are ready to submit. Please commit regularly to ensure that you establish a development history, even if you only push the changes infrequently. 
 
 ## Pre-Submission Checklist
 
 Before submitting, verify:
 
-- [ ] All three required files are present
 - [ ] Code runs without syntax errors
 - [ ] Agent starts and listens on port 1161
 - [ ] Manager can connect and send requests
