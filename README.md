@@ -129,7 +129,6 @@ The `src/` directory is where your implementation goes and where tests will look
 - [11. Additional Resources](#11-additional-resources)
   - [Protocol References](#protocol-references)
   - [Debugging Tools](#debugging-tools)
-  - [Getting Help](#getting-help)
   - [Final Advice](#final-advice)
   - [License](#license)
 
@@ -1243,12 +1242,7 @@ kill %1  # Stop background agent
 - **Wireshark** - Network packet analyzer (can decode real SNMP)
 - **tcpdump** - Command-line packet capture
 - **netcat** - Simple TCP testing tool
-
-## Getting Help
-- **Office Hours** - Best for debugging and implementation questions
-- **Course Forum** - General questions and clarifications
-- **Email Instructor** - For grading or submission issues
-
+  
 ## Final Advice
 
 1. **Start early** - Network debugging takes time
