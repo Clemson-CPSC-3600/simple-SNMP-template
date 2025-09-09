@@ -25,7 +25,7 @@ import time
 from typing import List, Tuple, Optional, Any
 
 # Import protocol components (you'll implement these in snmp_protocol.py)
-from snmp_protocol import (
+from .snmp_protocol import (
     PDUType, ValueType, ErrorCode,
     GetRequest, SetRequest, GetResponse,
     receive_complete_message, unpack_message

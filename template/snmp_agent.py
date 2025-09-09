@@ -28,7 +28,7 @@ import signal
 from typing import Dict, Any, List, Tuple, Optional
 
 # Import protocol components (you'll implement these in snmp_protocol.py)
-from snmp_protocol import (
+from .snmp_protocol import (
     PDUType, ValueType, ErrorCode,
     GetRequest, SetRequest, GetResponse,
     unpack_message, receive_complete_message,
