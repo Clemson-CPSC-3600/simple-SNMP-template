@@ -90,13 +90,13 @@ The `src/` directory is where your implementation goes and where tests will look
     - [✅ DO:](#-do)
     - [❌ DON'T:](#-dont)
 - [7. Project Milestones](#7-project-milestones)
-  - [Week 1: Basic GET Operations](#week-1-basic-get-operations)
+  - [1: Basic GET Operations](#1-basic-get-operations)
     - [Tasks](#tasks)
     - [Verification](#verification)
-  - [Week 2: Multiple OIDs \& Error Handling](#week-2-multiple-oids--error-handling)
+  - [2: Multiple OIDs \& Error Handling](#2-multiple-oids--error-handling)
     - [Tasks](#tasks-1)
     - [Verification](#verification-1)
-  - [Week 3: SET Operations \& State Management](#week-3-set-operations--state-management)
+  - [3: SET Operations \& State Management](#3-set-operations--state-management)
     - [Tasks](#tasks-2)
     - [Verification](#verification-2)
 - [8. Testing Your Implementation](#8-testing-your-implementation)
@@ -838,7 +838,7 @@ stateDiagram-v2
 
 # 7. Project Milestones
 
-## Week 1: Basic GET Operations
+## 1: Basic GET Operations
 
 **Goal:** Implement core protocol and simple queries.
 
@@ -862,7 +862,7 @@ python src/snmp_manager.py get localhost:1161 1.3.6.1.2.1.1.1.0
 python -m pytest tests/ -k "bundle_C" -v
 ```
 
-## Week 2: Multiple OIDs & Error Handling
+## 2: Multiple OIDs & Error Handling
 
 **Goal:** Handle complex queries and error conditions.
 
@@ -885,7 +885,7 @@ python src/snmp_manager.py get localhost:1161 1.3.6.1.2.1.1.99.0
 python -m pytest tests/ -k "bundle_B" -v
 ```
 
-## Week 3: SET Operations & State Management
+## 3: SET Operations & State Management
 
 **Goal:** Implement configuration changes and state persistence.
 
