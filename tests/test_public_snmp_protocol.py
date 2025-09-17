@@ -13,7 +13,7 @@ import pytest
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from tests.test_utils import TestDataGenerator
+from .test_utils import TestDataGenerator
 
 # ============================================================================
 # BUNDLE C (CORE PROTOCOL) - PUBLIC TESTS

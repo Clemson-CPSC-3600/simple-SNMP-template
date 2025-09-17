@@ -14,7 +14,7 @@ import pytest
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from tests.test_utils import (MockTCPClient, MockTCPServer,
+from .test_utils import (MockTCPClient, MockTCPServer,
                               TestDataGenerator)
 
 
@@ -288,6 +288,6 @@ def pytest_configure(config):
     # Only load JSON report hooks if the plugin is being used
     if config.getoption("--json-report", default=False):
         # Import the JSON report hooks dynamically
-        import tests.conftest_json_report as conftest_json_report
+        from . import conftest_json_report
         # Register the module with pytest's plugin system
         config.pluginmanager.register(conftest_json_report, "json_report_hooks")
