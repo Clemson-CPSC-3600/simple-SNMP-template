@@ -277,9 +277,9 @@ class SNMPAgent:
         - Database servers (PostgreSQL, MySQL)
         - Game servers (Minecraft, Fortnite)
         - Your future microservices!
-        
+
         Test verification: All agent tests require this to work!
-        Basic test: python3 -m pytest tests/integration/test_get_operations.py::TestGetOperations::test_single_oid_get -v
+        Basic test: python -m pytest tests/test_public_agent_manager_integration.py::TestBundleCIntegrationCore::test_basic_get_integration -v
         """
         # TODO: Create server socket (AF_INET, SOCK_STREAM)
         # TODO: Set SO_REUSEADDR option (CRITICAL!)
@@ -501,8 +501,8 @@ class SNMPAgent:
            - Same connection management issues
         
         Master this, and you understand the foundation of all network services!
-        
-        Test verification: TestGetOperations::test_multiple_oid_get
+
+        Test verification: TestBundleCIntegrationCore::test_multiple_oid_get_integration
         This test sends multiple requests on one connection!
         """
         try:
@@ -850,7 +850,10 @@ class SNMPAgent:
            print(f"Bindings: {response.bindings}")
         
         4. Test with snmp_manager.py:
-           python3 snmp_manager.py get localhost 1.3.6.1.2.1.1.5.0
+           # First, start the agent in one terminal:
+           python -m src.snmp_agent
+           # Then in another terminal:
+           python -m src.snmp_manager get localhost:1161 1.3.6.1.2.1.1.5.0
            # Should return the system name
         
         ============================================================================
@@ -869,8 +872,8 @@ class SNMPAgent:
         - Message queuing (RabbitMQ, Kafka)
         - Distributed tracing (Zipkin, Jaeger)
         - Microservice communication
-        
-        Test verification: TestGetOperations::test_single_oid_get
+
+        Test verification: TestBundleCIntegrationCore::test_basic_get_integration
         """
         # Update dynamic values first (like uptime)
         self._update_dynamic_values()
@@ -1078,17 +1081,22 @@ class SNMPAgent:
         ============================================================================
         TESTING YOUR IMPLEMENTATION
         ============================================================================
-        
+
+        First, start the agent in one terminal:
+           python -m src.snmp_agent
+
+        Then in another terminal, run these tests:
+
         1. Test successful SET:
-           python3 snmp_manager.py set localhost 1.3.6.1.2.1.1.5.0 STRING "new-name"
+           python -m src.snmp_manager set localhost:1161 1.3.6.1.2.1.1.5.0 STRING "new-name"
            # Should change system name
         
         2. Test read-only protection:
-           python3 snmp_manager.py set localhost 1.3.6.1.2.1.1.3.0 TIMETICKS 999
+           python -m src.snmp_manager set localhost:1161 1.3.6.1.2.1.1.3.0 TIMETICKS 999
            # Should fail - uptime is read-only!
         
         3. Test type mismatch:
-           python3 snmp_manager.py set localhost 1.3.6.1.2.1.1.5.0 INTEGER 42
+           python -m src.snmp_manager set localhost:1161 1.3.6.1.2.1.1.5.0 INTEGER 42
            # Should fail - sysName expects STRING!
         
         4. Test all-or-nothing with multiple:
@@ -1122,8 +1130,8 @@ class SNMPAgent:
         
         Master this pattern, and you'll write safer, more reliable code
         throughout your career!
-        
-        Test verification: TestSetOperations (all must pass for Bundle 2)
+
+        Test verification: TestBundleBAgentIntermediate::test_agent_set_request_basic (Bundle 2)
         """
         # TODO: Phase 1 - Validate ALL bindings
         #       - Check each OID exists
@@ -1265,12 +1273,14 @@ class SNMPAgent:
         ============================================================================
         TESTING YOUR IMPLEMENTATION
         ============================================================================
-        
-        1. Start your agent and immediately query uptime:
-           python3 snmp_manager.py get localhost 1.3.6.1.2.1.1.3.0
+
+        1. Start your agent in one terminal:
+           python -m src.snmp_agent
+           # Then immediately in another terminal, query uptime:
+           python -m src.snmp_manager get localhost:1161 1.3.6.1.2.1.1.3.0
            # Should show small value (< 100 timeticks)
-        
-        2. Wait 10 seconds and query again:
+
+        2. Wait 10 seconds and query again (agent still running):
            # Should show ~1000 timeticks (10 seconds * 100)
         
         3. Verify uptime increases monotonically:
@@ -1295,8 +1305,8 @@ class SNMPAgent:
         - Understanding precision vs range tradeoffs
         - Handling counter wraparounds
         - Network protocol time representations
-        
-        Test verification: TestErrorHandling::test_dynamic_values_update
+
+        Test verification: TestBundleCIntegrationCore::test_uptime_integration
         """
         # Step 1: Calculate how long we've been running (in seconds)
         # time.time() returns seconds since Unix epoch (Jan 1, 1970)
@@ -1347,7 +1357,7 @@ def main():
     """
     PROVIDED: Main entry point with command-line parsing
     
-    Usage: python3 snmp_agent.py [port]
+    Usage: python -m src.snmp_agent [port]
     Default port: 1161
     """
     # Parse command line arguments

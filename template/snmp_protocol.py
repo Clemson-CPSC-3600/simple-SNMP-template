@@ -63,7 +63,7 @@ class ErrorCode(IntEnum):
     READ_ONLY = 3      # Tried to SET a read-only value
 
 def encode_oid(oid_string: str) -> bytes:
-    """
+    r"""
     Convert OID string to bytes for network transmission.
     
     TODO: Implement OID encoding (BUNDLE 1 REQUIREMENT)
@@ -167,7 +167,7 @@ def encode_oid(oid_string: str) -> bytes:
         '010306010201010500'
     
     Run the test suite:
-        python3 -m pytest tests/integration/test_protocol_structure.py::TestOIDEncoding::test_simple_oid_encoding -v
+        python -m pytest tests/test_public_snmp_protocol.py::TestBundleCPublic::test_oid_encoding_multiple -v
     
     See README section 3.2.4 for complete OID format specification.
     """
@@ -315,7 +315,7 @@ def decode_oid(oid_bytes: bytes) -> str:
         True
     
     Run the test:
-        python3 -m pytest tests/integration/test_protocol_structure.py::TestOIDEncoding::test_oid_decoding -v
+        python -m pytest tests/test_public_snmp_protocol.py::TestBundleCPublic::test_oid_decoding_multiple -v
     
     See README section 3.2.4 for complete OID format details.
     """
@@ -489,7 +489,7 @@ def encode_value(value: Any, value_type: ValueType) -> bytes:
     3. Wrong byte order (getting weird values)
        → Make sure you use '!' for network byte order
     
-    Test: python3 -m pytest tests/integration/test_protocol_structure.py::TestValueTypeEncoding -v
+    Test: python -m pytest tests/test_public_snmp_protocol.py::TestBundleCPublic -v
     """
     # TODO: Use if/elif/else to check value_type
     # TODO: For INTEGER: struct.pack('!i', value) - lowercase 'i' for signed!
@@ -672,7 +672,7 @@ def decode_value(value_bytes: bytes, value_type: ValueType) -> Any:
         >>> decoded = decode_value(encoded, ValueType.INTEGER)
         >>> assert decoded == value  # Should work!
     
-    Test: python3 -m pytest tests/integration/test_protocol_structure.py::TestValueTypeEncoding -v
+    Test: python -m pytest tests/test_public_snmp_protocol.py::TestBundleCPublic -v
     """
     # TODO: Use if/elif/else to check value_type
     # TODO: For INTEGER: struct.unpack('!i', value_bytes)[0] - don't forget [0]!
@@ -832,7 +832,7 @@ class GetRequest(SNMPMessage):
         3. "Unknown PDU type" error
            -> Make sure self.pdu_type is PDUType.GET_REQUEST (0xA0)
         
-        Test: python3 -m pytest tests/integration/test_protocol_structure.py::TestMessageSizeCalculation::test_single_oid_size -v
+        Test: python -m pytest tests/test_public_snmp_protocol.py::TestBundleBPublic::test_get_request_pack_multiple -v
         
         See README Section 3.3.1 for the complete GetRequest specification.
         See README Section 6 for Mermaid diagrams showing message structure.
@@ -886,7 +886,7 @@ class GetRequest(SNMPMessage):
         - Track your offset: print(f"Current offset: {offset}, remaining: {len(data)-offset}")
         
         Test verification: Works with test_single_oid_get when agent is complete
-        Run: python3 -m pytest tests/integration/test_get_operations.py::TestGetOperations::test_single_oid_get -v
+        Run: python -m pytest tests/test_public_agent_manager_integration.py::TestBundleCIntegrationCore::test_basic_get_integration -v
         """
         # TODO: Extract request_id from bytes 4-8
         # TODO: Extract oid_count from byte 9
@@ -968,7 +968,7 @@ class SetRequest(SNMPMessage):
         72 6f 75 74 65 72 31  # "router1" in UTF-8
         
         Test verification: TestMessageSizeCalculation::test_set_request_size
-        Quick test: python3 -m pytest tests/integration/test_protocol_structure.py::TestMessageSizeCalculation::test_set_request_size -v
+        Quick test: python -m pytest tests/test_public_snmp_protocol.py::TestBundleBPublic::test_set_request_pack_multiple -v
         """
         # TODO: Build payload with bindings
         # TODO: Remember value_length is 2 bytes (!H not !B)
@@ -1000,7 +1000,7 @@ class SetRequest(SNMPMessage):
         offset += 2
         
         Test verification: Works with test_set_string_value when agent is complete
-        Run: python3 -m pytest tests/integration/test_set_operations.py::TestSetOperations::test_set_string_value -v
+        Run: python -m pytest tests/test_public_agent_manager_integration.py::TestBundleBIntegrationIntermediate -v
         """
         # TODO: Extract request_id and binding count
         # TODO: Loop through bindings, extracting OID, type, and value
@@ -1168,7 +1168,7 @@ class GetResponse(SNMPMessage):
            Wrong: struct.pack('!B', len(value_bytes))
            Right: struct.pack('!H', len(value_bytes))  # 2 bytes!
         
-        Test: python3 -m pytest tests/integration/test_protocol_structure.py::TestValueTypeEncoding::test_value_type_in_message -v
+        Test: python -m pytest tests/test_public_snmp_protocol.py::TestBundleCPublic -v
         
         See README Section 3.3.3 for complete GetResponse specification.
         """
@@ -1197,7 +1197,7 @@ class GetResponse(SNMPMessage):
         The payload parsing is identical to SetRequest.
         
         Test verification: All tests pass when complete implementation works
-        Run all: python3 -m pytest tests/integration/test_protocol_structure.py -v
+        Run all: python -m pytest tests/test_public_snmp_protocol.py -v
         """
         # TODO: Extract request_id and error_code
         # TODO: Parse bindings from payload (starts at byte 10!)
@@ -1424,7 +1424,7 @@ def receive_complete_message(sock) -> bytes:
     - Large messages that span many chunks
     - Connection failures mid-message
     
-    Run tests: python3 -m pytest tests/integration/test_message_buffering.py -v
+    Run tests: python -m pytest tests/test_public_snmp_protocol.py -v
     
     Key tests:
     - test_single_small_message - Basic functionality

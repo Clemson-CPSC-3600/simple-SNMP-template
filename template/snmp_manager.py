@@ -218,7 +218,7 @@ class SNMPManager:
            - Print request_id sent vs received
            - Check PDU type of response
         
-        Test: python3 -m pytest tests/integration/test_get_operations.py -v
+        Test: python -m pytest tests/test_public_agent_manager_integration.py::TestBundleCIntegrationCore -v
         """
         sock = None
         try:
@@ -306,7 +306,7 @@ class SNMPManager:
         DEBUGGING TIP:
         If set fails, try get first to see current value and type!
         
-        Test: python3 -m pytest tests/integration/test_set_operations.py -v
+        Test: python -m pytest tests/test_public_agent_manager_integration.py::TestBundleBIntegrationIntermediate -v
         """
         # PROVIDED: Parse value type
         type_map = {
