@@ -6,7 +6,9 @@ comments in `template/snmp_manager.py` link here when a function has
 detail that would otherwise clutter the source.
 
 For the wire format of the messages this client sends, see the
-[Protocol Reference](protocol.html).
+[Protocol Reference](protocol.html). Module-level constants
+(`DEFAULT_TIMEOUT`, `TIMETICKS_PER_SECOND`) are documented in the
+[Constants Reference](protocol.html#constants-reference).
 
 ---
 
@@ -50,6 +52,62 @@ python src/snmp_manager.py set localhost:1161 1.3.6.1.2.1.1.5.0 string "new-rout
 The command handlers print errors rather than raising — the CLI is meant to be
 friendly to students who have started the wrong port or forgotten to launch
 the agent.
+
+---
+
+## Running Your First Request
+
+Before studying the implementation, run the finished system end-to-end so you
+know what success looks like. You need two terminals open to the same project
+directory with the venv activated.
+
+**Terminal A — start the agent** (leave this running):
+
+```bash
+python src/snmp_agent.py
+```
+
+You should see something like `SNMP Agent listening on port 1161...`. If you
+see `[Errno 48] Address already in use`, another process is still holding
+the port — see [Debugging: Address Already in Use](debugging.html#address-already-in-use).
+
+**Terminal B — query the agent:**
+
+```bash
+# Read the system name (sysName.0)
+python src/snmp_manager.py get localhost:1161 1.3.6.1.2.1.1.5.0
+# => 1.3.6.1.2.1.1.5.0 = router-main
+```
+
+Try a few more reads:
+
+```bash
+# System description and uptime in one call
+python src/snmp_manager.py get localhost:1161 1.3.6.1.2.1.1.1.0 1.3.6.1.2.1.1.3.0
+
+# A non-existent OID — agent returns an error code, CLI prints it
+python src/snmp_manager.py get localhost:1161 1.3.6.1.2.1.1.99.0
+```
+
+Write a value, then read it back to see state persist inside the agent:
+
+```bash
+python src/snmp_manager.py set localhost:1161 1.3.6.1.2.1.1.5.0 string "my-router"
+python src/snmp_manager.py get localhost:1161 1.3.6.1.2.1.1.5.0
+# => 1.3.6.1.2.1.1.5.0 = my-router
+```
+
+Writing a read-only OID should fail cleanly:
+
+```bash
+python src/snmp_manager.py set localhost:1161 1.3.6.1.2.1.1.3.0 integer 0
+# => Error: Read-only OID
+```
+
+Stop the agent with `Ctrl+C` in Terminal A when you're done.
+
+If any of the above hangs or returns gibberish, something upstream of the
+manager is wrong — check [Debugging](debugging.html) before blaming the CLI.
 
 ---
 

@@ -9,6 +9,10 @@ responsibilities and control flow.
 The agent is implemented as a single class, `SNMPAgent`, in `src/snmp_agent.py`.
 Its public entry point is `start()`; everything else is an internal helper.
 
+Module-level constants (`DEFAULT_PORT`, `LISTEN_BACKLOG`, `TIMEOUT_SECONDS`,
+`TIMETICKS_PER_SECOND`) are all documented in the
+[Constants Reference](protocol.html#constants-reference).
+
 ---
 
 ## Server Lifecycle

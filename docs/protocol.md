@@ -734,3 +734,52 @@ Key scenarios the test suite exercises:
   correct boundary.
 - Large messages that require multiple 4096-byte chunks.
 - Connection closed mid-message — should raise `ConnectionError`.
+
+---
+
+## Constants Reference
+
+One table showing every module-level constant the implementation refers to.
+If you see a symbol in a code sample and want to know its value without
+greping, start here.
+
+### `template/snmp_protocol.py` — wire format
+
+| Constant | Value | What it governs |
+|----------|-------|-----------------|
+| `MESSAGE_HEADER_SIZE` | `9` | Bytes before payload in a request (`total_size + request_id + pdu_type`) |
+| `RESPONSE_HEADER_SIZE` | `10` | Bytes before payload in a response (adds `error_code`) |
+| `MIN_MESSAGE_SIZE` | `9` | Smallest legal message — reject anything shorter |
+| `MAX_MESSAGE_SIZE` | `65536` | Hard cap in `receive_complete_message`; stops a malformed `total_size` from allocating gigabytes |
+| `MAX_RECV_BUFFER` | `4096` | Upper bound for a single `recv()` chunk |
+| `SIZE_FIELD_LENGTH` | `4` | Width of the `total_size` field |
+| `REQUEST_ID_LENGTH` | `4` | Width of the `request_id` field |
+| `PDU_TYPE_LENGTH` | `1` | Width of the `pdu_type` field |
+| `ERROR_CODE_LENGTH` | `1` | Width of the response-only `error_code` field |
+| `OID_COUNT_LENGTH` | `1` | Width of the per-PDU `oid_count` / `binding_count` field |
+| `OID_LENGTH_FIELD` | `1` | Width of each OID's length prefix |
+| `VALUE_TYPE_LENGTH` | `1` | Width of the per-value type tag |
+| `VALUE_LENGTH_FIELD` | `2` | Width of each value's length prefix |
+| `OID_COUNT_MAX` | `255` | Maximum OIDs or bindings in one message (1-byte count field) |
+| `PDU_TYPE_OFFSET` | `8` | Byte offset where `pdu_type` lives — useful for early dispatch without full unpack |
+| `REQUEST_ID_OFFSET` | `4` | Byte offset where `request_id` lives |
+
+### `template/snmp_agent.py` — server-side
+
+| Constant | Value | What it governs |
+|----------|-------|-----------------|
+| `DEFAULT_PORT` | `1161` | Non-privileged port. The real SNMP port (161) requires root; 1161 doesn't |
+| `LISTEN_BACKLOG` | `5` | Accept-queue depth passed to `socket.listen()` |
+| `TIMEOUT_SECONDS` | `10.0` | Per-connection socket timeout on the agent side |
+| `TIMETICKS_PER_SECOND` | `100` | SNMP timeticks are 1/100s — used when reporting `sysUpTime` |
+
+### `template/snmp_manager.py` — client-side
+
+| Constant | Value | What it governs |
+|----------|-------|-----------------|
+| `DEFAULT_TIMEOUT` | `10.0` | Socket timeout on the client side |
+| `TIMETICKS_PER_SECOND` | `100` | Same as agent — used when formatting timetick values for display |
+
+These values are all tuned for the assignment, not the real SNMP standard.
+Do not change them; the tests depend on the protocol behaving the way this
+table describes.
