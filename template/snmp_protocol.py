@@ -63,119 +63,23 @@ class ErrorCode(IntEnum):
     READ_ONLY = 3      # Tried to SET a read-only value
 
 def encode_oid(oid_string: str) -> bytes:
-    r"""
-    Convert OID string to bytes for network transmission.
-    
-    TODO: Implement OID encoding (BUNDLE 1 REQUIREMENT)
-    Returns: bytes - The encoded OID as bytes
-    
-    ============================================================================
-    WHAT IS AN OID?
-    ============================================================================
-    An OID (Object Identifier) is like a file path for network data.
-    Just as "/home/user/documents/file.txt" identifies a file,
-    "1.3.6.1.2.1.1.5.0" identifies a specific piece of network information.
-    
-    Real example: "1.3.6.1.2.1.1.5.0" means:
-    - 1.3.6.1 = ISO.org.dod.internet
-    - .2.1 = mgmt.mib-2  
-    - .1.5.0 = system.sysName.0 (the device's hostname)
-    
-    ============================================================================
-    STEP-BY-STEP TRANSFORMATION
-    ============================================================================
-    Input:  "1.3.6.1.2.1.1.5.0" (human-readable string)
-    Output: b'\x01\x03\x06\x01\x02\x01\x01\x05\x00' (9 bytes for network)
-    
-    Step 1: Split the string into parts
-    --------
-    oid_parts = oid_string.split('.')
-    # Result: ["1", "3", "6", "1", "2", "1", "1", "5", "0"]
-    # Debug: print(f"Split OID into {len(oid_parts)} parts: {oid_parts}")
-    
-    Step 2: Convert each string to an integer
-    --------
-    numbers = [int(part) for part in oid_parts]
-    # Result: [1, 3, 6, 1, 2, 1, 1, 5, 0]
-    # Debug: print(f"Converted to integers: {numbers}")
-    
-    Step 3: Convert integer list to bytes
-    --------
-    oid_bytes = bytes(numbers)
-    # Result: b'\x01\x03\x06\x01\x02\x01\x01\x05\x00'
-    # Debug: print(f"Encoded as {len(oid_bytes)} bytes: {oid_bytes.hex()}")
-    
-    ============================================================================
-    COMPLETE SOLUTION PATTERN
-    ============================================================================
-    def encode_oid(oid_string: str) -> bytes:
-        # Split → Convert → Encode
-        parts = oid_string.split('.')
-        numbers = [int(part) for part in parts]
-        return bytes(numbers)
-    
-    Or as a one-liner:
-        return bytes(int(part) for part in oid_string.split('.'))
-    
-    ============================================================================
-    UNDERSTANDING THE BYTES
-    ============================================================================
-    When you print the result, you might see: b'\x01\x03\x06\x01\x02\x01\x01\x05\x00'
-    
-    What does \x01 mean?
-    - \x indicates hexadecimal notation
-    - 01 is the hex value (equals decimal 1)
-    - Each \xNN represents one byte
-    
-    You may also see letters and symbols mixed in with \xNN. This happens when 
-    the hex value maps on to a UTF-8 character and python automatically translates 
-    it for you.
-    
-    To see the raw hexadecimal more clearly, use .hex():
-        oid_bytes.hex() → "010306010201010500"
-        ' '.join(f'{b:02x}' for b in oid_bytes) → "01 03 06 01 02 01 01 05 00"
-    
-    ============================================================================
-    COMMON MISTAKES AND FIXES
-    ============================================================================
-    
-    Mistake 1: Forgetting to convert strings to ints
-    --------
-    Wrong: bytes(["1", "3", "6"])  # Error: strings aren't 0-255 integers!
-    Right: bytes([1, 3, 6])        # Works: integers in valid range
-    
-    Mistake 2: Trying to encode the string directly
-    --------
-    Wrong: oid_string.encode()      # Gives b'1.3.6.1...' (wrong!)
-    Right: Use the algorithm above  # Gives b'\x01\x03\x06...' (correct!)
-    
-    Mistake 3: Numbers outside 0-255 range
-    --------
-    If you get "bytes must be in range(0, 256)":
-    - Check your OID doesn't have numbers > 255
-    - Standard OIDs shouldn't have this issue
-    
-    ============================================================================
-    TESTING YOUR IMPLEMENTATION
-    ============================================================================
-    
-    Quick test in Python:
-        >>> encode_oid("1.3.6.1.2.1.1.5.0")
-        b'\x01\x03\x06\x01\x02\x01\x01\x05\x00'
-        
+    """Convert a dotted-decimal OID string to bytes for network transmission.
+
+    Each component of the OID becomes one byte. Raises ValueError for empty
+    input or components outside 0-255.
+
+    Example:
         >>> encode_oid("1.3.6.1.2.1.1.5.0").hex()
         '010306010201010500'
-    
-    Run the test suite:
-        python -m pytest tests/test_public_snmp_protocol.py::TestBundleCPublic::test_oid_encoding_multiple -v
-    
-    See README section 3.2.4 for complete OID format specification.
+
+    Bundle 1 requirement. Full walkthrough (worked example, common mistakes,
+    reference implementation):
+    https://clemson-cpsc-3600.github.io/simple-SNMP-template/protocol.html#oid-encoding
     """
-    # TODO: Split the OID string by '.' into a list of string numbers
-    # TODO: Convert each string number to an integer
-    # TODO: Convert the list of integers to bytes using bytes()
-    # Debugging: Add print statements to verify each step!
-    raise NotImplementedError("Implement encode_oid")
+    raise NotImplementedError(
+        "Implement encode_oid — see "
+        "https://clemson-cpsc-3600.github.io/simple-SNMP-template/protocol.html#oid-encoding"
+    )
 
 def decode_oid(oid_bytes: bytes) -> str:
     """

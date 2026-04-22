@@ -1,0 +1,12 @@
+# Known-good SHA-256 hashes of capture-layer files.
+# Regenerated with: python tools/verify_integrity.py --update
+2064222a5c9bf3c4e5d4edd1a125b5a7877747275d90f3237ad29becb179cfa2  tests/_capture/__init__.py
+2f3f102b31366a67bd4105e6080d96fa907133e790acf43af69df48653f2fbde  tests/_capture/auth.py
+5d1d2efab8864016d52c906dd9252344cadbbc84d3cb7e8fa7609d1b59cbb716  tests/_capture/capture.py
+0413a35fc33a325f1d3eb835c6a6a8fe401a6427f0c7856de69eb7b16950e35d  tests/_capture/codex_ingest.py
+62631be22318e309403d9f2ca0194c5663b7eb95a8d3014ff2012ca755afe1f1  tests/_capture/git_ops.py
+6f2e416b019a179eb1567644d150de072890038c3f929e303ec35420ea298c11  tests/_capture/metadata.py
+f92ab49de830992566d4445b2dfc14000e1b724c026daf54152407b25cdb4074  tests/_capture/platform_compat.py
+7eb5bed20af11540aa96849ecc80ce53b8c28028e7ba764bf47cd1608a29b676  tests/_capture/state.py
+a7ef4ae6e5b854e3c5398363eefb3d564efed2da6acebb1a0c42aa6ebe750429  tests/_capture/watchdog.py
+96139239d1aaaa95d5ee2088df43e7bec8cc0005395aadf9519c339cbf7b7a1a  tests/conftest.py

@@ -1,7 +1,7 @@
 [project]
-name = "class-project-starter"
+name = "simple-snmp"
 version = "0.1.0"
-description = "A Python project starter template for introductory programming"
+description = "Simplified SNMP protocol implementation (CPSC 3600)"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {file = "LICENSE"}
@@ -16,6 +16,13 @@ addopts = [
     "-v",
     "--tb=short",
     "--strict-markers",
+    # thread method is cross-platform; signal method fails on Windows.
+    # Thread can't interrupt C-level blocks; the watchdog covers that.
+    # Calibrated 2026-04-22: slowest reference-solution test is ~0.5s; 15s
+    # gives ~30x headroom for slower student machines, CI runners, and
+    # debuggers. Override per-test with @pytest.mark.timeout(N) if needed.
+    "--timeout=15",
+    "--timeout-method=thread",
 ]
 markers = [
     "bundle: mark test as belonging to a specific grading bundle (usage: @pytest.mark.bundle(1))",

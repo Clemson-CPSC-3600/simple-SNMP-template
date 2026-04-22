@@ -223,3 +223,22 @@ PRIVATE_TESTS_SUMMARY.md
 README_CLARIFICATIONS.md
 SNMP_TEST_DOCUMENTATION.md
 SNMP_TEST_SUITE_DESIGN.md
+
+# Development trace capture — runtime state, never committed
+.test-run-state/
+.test-runs.log
+
+# Claude Code session-local state: observer logs, observations, ephemeral
+# plans, scheduled-task locks, machine-specific settings. Not shared across
+# instructor checkouts.
+.claude/
+
+# Git worktrees created for isolated feature development. Worktree contents
+# should never be tracked — each worktree has its own branch.
+.worktrees/
+
+# Codex CLI credentials — never commit OpenAI tokens. Transcript JSONL files
+# under .codex-transcripts/ ARE committed by design (see PROCESS_TRACKING.md
+# and AI_POLICY.md). .codex/config.toml is also committed because it's shipped
+# by the instructor. This single exclusion protects only the auth blob.
+.codex/auth.json
