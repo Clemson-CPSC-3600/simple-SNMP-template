@@ -80,8 +80,8 @@ until the peer closes or we time out.
 - Call `client_socket.settimeout(TIMEOUT_SECONDS)` before the loop so a
   silent client cannot hold the handler open forever.
 - Use `receive_complete_message(client_socket)` to reassemble a message
-  from the TCP byte stream — see the [Protocol Reference buffering
-  section](../README.md#6-message-buffering) for why partial reads matter.
+  from the TCP byte stream — see the [Protocol Reference, "Message
+  Framing"](protocol.html#message-framing) for why partial reads matter.
 - Pass the message bytes to `_process_message`, then `sendall` the result.
 - Exit the loop cleanly on `ConnectionError` (client hung up) or
   `socket.timeout` (client went silent).
