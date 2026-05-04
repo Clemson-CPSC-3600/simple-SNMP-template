@@ -51,21 +51,33 @@ def main() -> int:
     if not platform_compat.is_process_alive(target_pid):
         return 0
 
-    # Record a hang commit
+    # Record a hang snapshot via the v2 pipeline. NOTE: we deliberately
+    # bypass the orchestrator here -- the orchestrator acquires a repo-scoped
+    # advisory lock, and the hung parent process may still hold it. Routing
+    # the hang path through the orchestrator would deadlock or time out,
+    # defeating the watchdog's purpose. See orchestrator spec section 11
+    # and the auto-track plan Phase 4 intro.
     try:
         result = metadata.TestResult()
         result.duration_seconds = time.time() - started_at
+        head_ref, head_sha = git_ops.current_head_info(repo)
+        git_state = git_ops.detect_git_state(repo)
         msg = metadata.format_commit_message(
             session_id=session_id,
             status="hang_watchdog_killed",
             result=result,
             diff_added=0, diff_removed=0, files_changed=[],
             hostname_hash=metadata.hostname_hash(str(repo)),
+            current_head_ref=head_ref,
+            current_head_sha=head_sha if head_sha else "unborn",
+            git_state=git_state,
+            trigger="pytest_watchdog",
         )
-        git_ops.stage_student_files(repo)
-        git_ops.commit(repo, msg, allow_empty=True)
-        # Also try to push the hang evidence
-        git_ops.push_background(repo, repo / ".test-runs.log")
+        existing = [p for p in ["src", "tests", ".ai-traces", ".codex",
+                                "AGENTS.md", "AI_POLICY.md"]
+                    if (repo / p).exists()]
+        git_ops.snapshot_to_auto_track(repo, msg, existing, head_ref, head_sha)
+        git_ops.push_auto_track_background(repo, repo / ".test-runs.log")
     except Exception:
         pass  # even if recording fails, we still kill
 

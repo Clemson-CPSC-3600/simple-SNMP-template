@@ -6,13 +6,44 @@ and verified by the CI integrity workflow.
 
 If capture is misbehaving, contact your instructor rather than editing this file.
 """
+import json
+import subprocess
 from pathlib import Path
+
+import pytest
 
 from tests._capture import capture
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _SESSION_CTX = None
 _BUNDLE_BY_NODEID: dict = {}
+
+
+@pytest.fixture
+def tmp_git_repo_with_capture(tmp_path):
+    """Tmp git repo with capture_enabled=true config plus src/ and tests/.
+
+    Used by orchestrator + integration tests to exercise the snapshot
+    pipeline end-to-end. Mirrors the layout of a real student repo enough
+    that `_capture_enabled` returns True and `snapshot_to_auto_track`
+    finds the allowlisted directories.
+    """
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"],
+                   cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"],
+                   cwd=tmp_path, check=True)
+    (tmp_path / "src").mkdir()
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "src" / ".gitkeep").write_text("")
+    (tmp_path / "tests" / ".gitkeep").write_text("")
+    (tmp_path / "project-template-config.json").write_text(
+        json.dumps({"distribution_mode": "student", "capture_enabled": True})
+    )
+    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-q", "-m", "init"],
+                   cwd=tmp_path, check=True)
+    return tmp_path
 
 
 def pytest_sessionstart(session):
@@ -23,6 +54,23 @@ def pytest_sessionstart(session):
     session_finish dedupe can collapse outer and inner commits.
     """
     import os
+    # Block sitecustomize-triggered captures from any subprocess we spawn
+    # during this pytest run. The watchdog spawned in capture.session_start()
+    # inherits this env var and its sitecustomize import will see the gate
+    # and skip atexit registration. Set BEFORE session_start() so the
+    # watchdog subprocess inherits it. Do not pop at session end — pytest
+    # teardown may also spawn subprocesses we don't want firing capture.
+    os.environ["_CAPTURE_SUBPROCESS"] = "1"
+
+    # Self-install editor-agnostic capture triggers (sitecustomize.py into
+    # the venv + core.hooksPath = .githooks). Idempotent and silent;
+    # see tests/_capture/runtime_triggers.py for what it installs and why.
+    try:
+        from tests._capture import runtime_triggers
+        runtime_triggers.ensure_installed(_PROJECT_ROOT)
+    except Exception:
+        pass
+
     global _SESSION_CTX
     sid = os.environ.get("CAPTURE_SESSION_ID")
     started_at_raw = os.environ.get("CAPTURE_STARTED_AT")

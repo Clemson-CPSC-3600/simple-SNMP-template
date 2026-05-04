@@ -1,9 +1,8 @@
-"""Copy Codex rollout transcripts for this repo into .codex-transcripts/.
+"""Copy Codex rollout transcripts for this repo into .ai-traces/.
 
-Called from capture.session_finish AFTER the session's test tallies are
-recorded but BEFORE stage_student_files. We pull matching rollouts out of
-$CODEX_HOME/sessions/, filter by cwd == repo, and copy them into the repo
-so the existing capture commit picks them up.
+Called from CodexAdapter.ingest (orchestrator-driven). We pull matching
+rollouts out of $CODEX_HOME/sessions/, filter by cwd == repo, and copy them
+into .ai-traces/codex/raw/rollouts so the adapter can normalize them.
 
 We intentionally do NOT filter by mtime against the pytest session start.
 The realistic workflow is: student runs Codex (rollout mtime fixed), then
@@ -35,7 +34,10 @@ import shutil
 from pathlib import Path
 from typing import List, Optional
 
-TRANSCRIPTS_DIR = ".codex-transcripts"
+from tests._capture import ai_traces
+
+TRANSCRIPTS_DIR = ai_traces.AI_TRACES_DIR
+CODEX_ROLLOUTS_DIR = Path(ai_traces.AI_TRACES_DIR) / "codex" / "raw" / "rollouts"
 ROLLOUT_GLOB = "rollout-*.jsonl"
 
 
@@ -90,7 +92,7 @@ def _same_path(candidate: str, repo: Path) -> bool:
 
 
 def ingest_transcripts(repo: Path, session_started_at: float) -> List[Path]:
-    """Copy matching rollouts into repo/.codex-transcripts/. Never raises.
+    """Copy matching rollouts into repo/.ai-traces/codex/raw/rollouts/. Never raises.
 
     Selection criteria:
       * rollout payload.cwd resolves to the same path as ``repo``
@@ -109,12 +111,6 @@ def ingest_transcripts(repo: Path, session_started_at: float) -> List[Path]:
         if sessions_dir is None or not sessions_dir.is_dir():
             return []
 
-        dest_dir = repo / TRANSCRIPTS_DIR
-        try:
-            dest_dir.mkdir(exist_ok=True)
-        except OSError:
-            return []
-
         copied: List[Path] = []
         try:
             candidates = list(sessions_dir.rglob(ROLLOUT_GLOB))
@@ -129,6 +125,11 @@ def ingest_transcripts(repo: Path, session_started_at: float) -> List[Path]:
                 continue
             if not _same_path(_rollout_cwd(src), repo):
                 continue
+            dest_dir = repo / CODEX_ROLLOUTS_DIR
+            try:
+                dest_dir.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                return copied
             dest = dest_dir / src.name
             if dest.exists():
                 continue

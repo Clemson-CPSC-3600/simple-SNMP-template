@@ -2,7 +2,7 @@
 
 The module under test scans ``$CODEX_HOME/sessions/`` recursively for Codex
 rollout JSONL files, filters them by cwd match, and copies matches into
-``<repo>/.codex-transcripts/``. Dedup is handled by the idempotency check
+``<repo>/.ai-traces/codex/raw/rollouts/``. Dedup is handled by the idempotency check
 (destination file exists → skip) rather than an mtime cutoff, because the
 realistic workflow writes the rollout BEFORE the pytest session starts.
 
@@ -77,8 +77,9 @@ def test_ingest_copies_rollouts_whose_cwd_matches_repo(tmp_path, fake_codex_home
 
     assert len(copied) == 1
     assert copied[0].name == matching.name
-    assert (repo / ".codex-transcripts" / matching.name).exists()
-    assert not (repo / ".codex-transcripts" / "rollout-bbb.jsonl").exists()
+    dest = repo / ".ai-traces" / "codex" / "raw" / "rollouts"
+    assert (dest / matching.name).exists()
+    assert not (dest / "rollout-bbb.jsonl").exists()
 
 
 def test_ingest_captures_rollouts_created_before_session_start(tmp_path, fake_codex_home):
@@ -120,7 +121,7 @@ def test_ingest_ignores_rollouts_with_different_cwd(tmp_path, fake_codex_home):
     copied = codex_ingest.ingest_transcripts(repo, session_started_at)
 
     assert copied == []
-    assert not (repo / ".codex-transcripts" / "rollout-other.jsonl").exists()
+    assert not (repo / ".ai-traces").exists()
 
 
 def test_ingest_is_idempotent_when_destination_exists(tmp_path, fake_codex_home):
@@ -145,6 +146,7 @@ def test_ingest_returns_empty_when_codex_home_missing(tmp_path, monkeypatch):
     repo.mkdir()
 
     assert codex_ingest.ingest_transcripts(repo, time.time()) == []
+    assert not (repo / ".ai-traces").exists()
 
 
 def test_ingest_swallows_errors_on_malformed_jsonl(tmp_path, fake_codex_home):

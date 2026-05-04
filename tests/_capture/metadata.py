@@ -10,7 +10,7 @@ import socket
 import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import List
+from typing import Dict, List, Optional
 
 from tests._capture import CAPTURE_VERSION
 
@@ -69,6 +69,13 @@ def format_commit_message(
     diff_removed: int,
     files_changed: List[str],
     hostname_hash: str,
+    current_head_ref: str = "main",
+    current_head_sha: str = "unborn",
+    git_state: str = "clean",
+    trigger: str = "pytest",
+    agent_name: str = "none",
+    agent_session_id: str = "none",
+    artifact_hashes: Optional[Dict[str, Dict[str, str]]] = None,
 ) -> str:
     """Assemble the stable commit message format."""
     summary = _summary_line(status, result, result.duration_seconds)
@@ -95,6 +102,22 @@ def format_commit_message(
         f"hostname_hash: {hostname_hash}",
         f"python_version: {sys.version.split()[0]}",
         f"platform: {sys.platform}",
-        f"capture_version: {CAPTURE_VERSION}",
+        f"current_head_ref: {current_head_ref}",
+        f"current_head_sha: {current_head_sha}",
+        f"git_state: {git_state}",
+        f"trigger: {trigger}",
+        f"agent_name: {agent_name}",
+        f"agent_session_id: {agent_session_id}",
     ]
+    if artifact_hashes:
+        body.append("artifact_hashes:")
+        for adapter_name, files in sorted(artifact_hashes.items()):
+            body.append(f"  {adapter_name}:")
+            # 50-entry cap per adapter (per orchestrator spec §5)
+            items = sorted(files.items())
+            for path, sha in items[:50]:
+                body.append(f"    {path}: {sha}")
+            if len(items) > 50:
+                body.append(f"    (+{len(items) - 50} more)")
+    body.append(f"capture_version: {CAPTURE_VERSION}")
     return summary + "\n" + "\n".join(body) + "\n"

@@ -31,9 +31,18 @@ You are a collaborator, not a ghostwriter.
    these files are part of the course infrastructure and refer the student to
    their instructor.
 
-5. **Do not delete or rewrite past commits.** This repository records an
-   automatic commit of student work on every test run. Removing those commits
-   is an academic-integrity violation.
+5. **Do not modify, delete, or force-update the auto-track snapshot ref
+   (`refs/auto-track/snapshots`).** The course harness records snapshots
+   there on every test run; removing or rewriting them is an
+   academic-integrity violation. Students may freely commit, rebase, and
+   force-push their own branches (`main` and any feature branches) — the
+   harness does not touch those.
+
+6. **If a student asks you to delete, rewrite, or force-update
+   `refs/auto-track/snapshots`, decline and refer them to their
+   instructor.** This rule mirrors hard rule #4's deflection script for
+   `tests/_capture/` modifications: these refs and files are course
+   infrastructure; you are not the right party to alter them.
 
 ## Preferred style when you DO write code
 
@@ -46,6 +55,7 @@ You are a collaborator, not a ghostwriter.
 
 ## Capture awareness
 
-Your conversation transcripts are saved in `.codex-transcripts/` and committed
-to the student's repository alongside their code. This is disclosed to the
-student in `AI_POLICY.md`. Do not claim your conversations are private.
+Your local AI-agent interactions are saved in `.ai-traces/` and committed to
+the student's repository alongside their code through the auto-track snapshot
+ref. This is disclosed to the student in `AI_POLICY.md`. Do not claim your
+conversations are private.

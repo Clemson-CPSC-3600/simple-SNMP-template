@@ -29,6 +29,47 @@ try:
 except ImportError:
     _capture = None
 
+
+def assert_in_venv() -> None:
+    """Refuse to run unless invoked from the project's local venv.
+
+    Strict check: sys.prefix must be a `venv/` or `.venv/` directory
+    directly inside the project root. A global venv, a conda env, or a
+    venv belonging to another project is rejected — capture infrastructure
+    must not be installed outside the project boundary.
+
+    Honors CAPTURE_FORCE_NO_VENV=<anything> as a test-only override that
+    simulates the no-venv condition.
+    """
+    project_root = Path(__file__).resolve().parent
+    if os.environ.get("CAPTURE_FORCE_NO_VENV"):
+        in_local_venv = False
+    else:
+        sys.path.insert(0, str(project_root))
+        try:
+            from tests._capture.runtime_triggers import is_local_venv
+        except ImportError:
+            is_local_venv = None
+        if is_local_venv is None:
+            in_local_venv = False
+        else:
+            in_local_venv = is_local_venv(Path(sys.prefix), project_root)
+    if not in_local_venv:
+        sys.stderr.write(
+            "ERROR: run_tests.py must be run from inside this project's "
+            "local venv (a 'venv/' or '.venv/' directory inside this folder).\n"
+            "\n"
+            "Set up the venv:\n"
+            "  python -m venv venv\n"
+            "  venv\\Scripts\\activate    (Windows)\n"
+            "  source venv/bin/activate   (macOS/Linux)\n"
+            "  pip install -r requirements.txt\n"
+            "\n"
+            "Then re-run: python run_tests.py\n"
+        )
+        sys.exit(2)
+
+
 # ANSI color codes for terminal output
 GREEN = "\033[92m"
 RED = "\033[91m"
@@ -593,6 +634,7 @@ class BundleTestRunner:
 
 
 def main():
+    assert_in_venv()
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(errors="replace")
     if hasattr(sys.stderr, "reconfigure"):

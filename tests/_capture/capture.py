@@ -16,9 +16,9 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
-from tests._capture import git_ops, metadata, state, auth, codex_ingest
+from tests._capture import git_ops, metadata, state, orchestrator
 
 
 LOG_FILENAME = ".test-runs.log"
@@ -130,9 +130,6 @@ def session_start(repo: Path, per_test_timeout: float = 30.0,
     if not git_ops.is_git_repo(repo):
         _log(repo, "session_start: not a git repo -- capture disabled")
         return None
-    if git_ops.is_in_merge_or_rebase(repo):
-        _log(repo, "session_start: repo is mid-merge/rebase -- capture skipped")
-        return None
 
     # Inner-session fast path: outer wrapper already set up marker + watchdog.
     if session_id is not None and started_at is not None:
@@ -180,6 +177,10 @@ def session_start(repo: Path, per_test_timeout: float = 30.0,
     except OSError as e:
         _log(repo, f"watchdog spawn failed: {e}")
 
+    # Best-effort fetch of remote auto-track tip so subsequent snapshots
+    # can pick the right first parent across machines.
+    git_ops.fetch_auto_track(repo)
+
     return SessionContext(
         session_id=sid, repo=repo, started_at=started_at,
         hard_deadline=hard_deadline,
@@ -187,80 +188,61 @@ def session_start(repo: Path, per_test_timeout: float = 30.0,
 
 
 def session_finish(repo: Path, ctx: SessionContext, status: str = "completed") -> None:
-    """Called by pytest_sessionfinish. Records the commit and kicks off push."""
+    """Called by pytest_sessionfinish. Delegates to orchestrator.take_snapshot."""
     try:
         ctx.finalize_bundles()
         ctx.result.duration_seconds = time.time() - ctx.started_at
-
-        # Dedupe: if HEAD already carries a commit for this session_id, skip.
-        # This happens when both conftest and run_tests.py try to commit for the
-        # same pytest invocation. The earlier (conftest-level) commit has richer
-        # test-result data, so we keep it and skip the outer wrapper's attempt.
-        last = git_ops.run_git(["log", "-1", "--format=%B"], cwd=repo, timeout=5.0)
-        if last.returncode == 0 and f"session_id: {ctx.session_id}" in last.stdout:
-            return
-
-        # Best-effort Codex rollout ingest. Never raises (Task 2 contract);
-        # kept inside this try: anyway as defense in depth so nothing bypasses
-        # the finally-clause cleanup below.
-        codex_ingest.ingest_transcripts(repo, ctx.started_at)
-
-        git_ops.stage_student_files(repo)
-        stats = git_ops.diff_stats_staged(repo)
-        msg = metadata.format_commit_message(
-            session_id=ctx.session_id,
+        orchestrator.take_snapshot(
+            repo,
+            trigger="pytest",
+            pytest_session_id=ctx.session_id,
+            test_result=ctx.result,
             status=status,
-            result=ctx.result,
-            diff_added=stats.added,
-            diff_removed=stats.removed,
-            files_changed=stats.files,
-            hostname_hash=metadata.hostname_hash(str(repo)),
+            adapter_metadata=None,
         )
-        committed = git_ops.commit(repo, msg, allow_empty=True)
-        if not committed:
-            _log(repo, f"session_finish: commit failed for session {ctx.session_id}")
-            return
-
-        log_path = repo / LOG_FILENAME
-        git_ops.push_background(repo, log_path)
-
-        # Friendly auth hint from previous push output, if any.
-        hint = auth.diagnose_push_log(log_path)
-        if hint:
-            # Print but don't block or raise.
-            print(hint, file=sys.stderr)
-    except Exception as e:
-        _log(repo, f"session_finish: exception {type(e).__name__}: {e}")
     finally:
         state.finish_session(repo, ctx.session_id)
 
 
 def _commit_orphan(repo: Path, orphan: dict) -> None:
-    """Record a commit for a session that never called session_finish.
-
-    CRITICAL: Do NOT stage student files here. The current working-tree diff
-    belongs to the NEW session about to start, not to the orphaned prior run.
-    Staging + committing here would swallow the current diff into the orphan
-    record, leaving the real post-test commit empty and destroying the
-    per-run diff-size signal that is the whole point of this capture.
-
-    We reset the index first to guarantee nothing the caller may have staged
-    leaks into the orphan commit, then commit empty.
-    """
+    """Record a snapshot for a session that never called session_finish."""
     try:
         result = metadata.TestResult()
         if "started_at" in orphan:
             result.duration_seconds = min(time.time() - orphan["started_at"], 3600.0)
-        msg = metadata.format_commit_message(
-            session_id=orphan.get("session_id", "unknown"),
+        orchestrator.take_snapshot(
+            repo,
+            trigger="pytest",
+            pytest_session_id=orphan.get("session_id", "unknown"),
+            test_result=result,
             status="orphaned_prior_run",
-            result=result,
-            diff_added=0, diff_removed=0, files_changed=[],
-            hostname_hash=metadata.hostname_hash(str(repo)),
         )
-        # Unstage anything that may already be staged, without touching the
-        # working tree. `git reset` with no args preserves working-tree state.
-        git_ops.run_git(["reset", "-q"], cwd=repo, timeout=5.0)
-        git_ops.commit(repo, msg, allow_empty=True)
     except Exception:
         pass  # best-effort
+
+
+def snapshot_now(repo: Path, trigger_name: str) -> Optional[str]:
+    """Trigger-agnostic single-shot snapshot for non-pytest callers.
+
+    Used by sitecustomize.py (interpreter exit) and the git post-commit
+    hook. Calls orchestrator.take_snapshot directly so we skip the
+    pytest-specific overhead of session_start/session_finish (orphan
+    recovery, watchdog spawn, state marker), which would be wasteful
+    on every Python invocation in the project venv.
+
+    Returns the snapshot SHA on success, or None when capture is
+    disabled, the repo isn't a git repo, the orchestrator lock is
+    contended, or any unexpected exception occurs. Never raises:
+    capture must not break a student's Python script or git commit.
+    """
+    try:
+        return orchestrator.take_snapshot(
+            repo,
+            trigger=trigger_name,
+            pytest_session_id=None,
+            test_result=metadata.TestResult(),
+            status="completed",
+        )
+    except Exception as exc:
+        _log(repo, f"snapshot_now({trigger_name}) failed: {exc!r}")
+        return None
