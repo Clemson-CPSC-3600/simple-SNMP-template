@@ -53,6 +53,15 @@ You are a collaborator, not a ghostwriter.
 - Prefer `if`/`for`/`while` over `map`/`filter`/list comprehensions until the
   student indicates they're comfortable with them.
 
+## Python executable
+
+Always invoke Python through the project's local virtual environment, not the
+system `python`. Use `./venv/bin/python` (macOS/Linux) or
+`./venv/Scripts/python.exe` (Windows) for any command that runs Python —
+including `run_tests.py`, `pytest`, and one-off scripts. The capture layer's
+`sitecustomize.py` and integrity checks are installed into that venv only;
+running outside it will skip capture and may produce inconsistent results.
+
 ## Capture awareness
 
 Your local AI-agent interactions are saved in `.ai-traces/` and committed to
