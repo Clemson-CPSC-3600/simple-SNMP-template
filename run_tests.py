@@ -29,6 +29,11 @@ try:
 except ImportError:
     _capture = None
 
+try:
+    from tools import preflight as _preflight
+except ImportError:
+    _preflight = None
+
 
 def assert_in_venv() -> None:
     """Refuse to run unless invoked from the project's local venv.
@@ -683,8 +688,23 @@ Note: If the 'solution' directory contains Python files, it will be tested autom
         action="store_true",
         help="Run only the tests that failed on the previous pytest run",
     )
+    parser.add_argument(
+        "--skip-preflight",
+        action="store_true",
+        help=(
+            "Skip the environment check that gates test runs (instructor / "
+            "edge-case use only)."
+        ),
+    )
 
     args, pytest_args = parser.parse_known_args()
+
+    if not args.skip_preflight and _preflight is not None:
+        repo = Path(__file__).resolve().parent
+        failures = _preflight.check_environment(repo)
+        if failures:
+            _preflight.report(repo, failures)
+            return 4
 
     runner = BundleTestRunner(
         verbose=args.verbose,
