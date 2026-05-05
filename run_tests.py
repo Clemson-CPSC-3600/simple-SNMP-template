@@ -498,7 +498,8 @@ class BundleTestRunner:
         print(f"{BOLD}SPECIFICATION GRADING RESULTS{RESET}")
         print("=" * 80)
         print(f"\n{BOLD}Grade Level Achieved: {grade_color}{grade}{RESET}")
-        print(f"{BOLD}Points Earned: {points}/100{RESET}\n")
+        print(f"{BOLD}Grade Score: {points}/100{RESET}  "
+              f"(specifications grading: bundle-completion based)\n")
 
         bundle_names = {
             1: "Bundle 1 (Core Requirements)",
@@ -539,6 +540,8 @@ class BundleTestRunner:
         print("- You must pass ALL tests in a bundle to receive credit")
         print("- Higher bundles require completion of all lower bundles")
         print("- Bundle 1 = 70 points (C), Bundle 1+2 = 85 points (B), All = 100 points (A)")
+        print("- Per-test \"(X/Y pts)\" beside each bundle is a progress indicator only;")
+        print("  the Grade Score is awarded by bundle completion, not by summing test points.")
 
         print(f"\n{BOLD}Next Steps:{RESET}")
         if not bundle_status[1]["complete"]:
@@ -597,8 +600,13 @@ class BundleTestRunner:
             print(f"Root directory: {self.root_dir}")
 
             if not self.has_solution_files():
-                print("\n[INFO] No solution files found.")
-                print("   Running tests with existing src/ implementation.")
+                if self.solution_dir.exists():
+                    # Directory exists but is empty -- worth flagging as a
+                    # likely misconfiguration. Otherwise (the normal student
+                    # case where solution/ does not exist at all), say nothing
+                    # so the output focuses on the test run itself.
+                    print("\n[INFO] solution/ exists but contains no Python files.")
+                    print("   Running tests with existing src/ implementation.")
 
                 exit_code, bundles_data = self.run_tests_standard()
                 self.print_bundle_results(bundles_data)
