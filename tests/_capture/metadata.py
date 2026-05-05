@@ -41,7 +41,9 @@ def hostname_hash(project_path: str) -> str:
     return digest[:16]
 
 
-def _summary_line(status: str, result: TestResult, duration: float) -> str:
+def _summary_line(
+    status: str, result: TestResult, duration: float, trigger: str = "pytest",
+) -> str:
     if status == "hang_watchdog_killed":
         return f"test-run: SESSION HUNG -- killed by watchdog at {int(duration)}s"
     if status == "orphaned_prior_run":
@@ -50,6 +52,11 @@ def _summary_line(status: str, result: TestResult, duration: float) -> str:
         return "test-run: capture error -- see .test-runs.log"
     # completed
     if result.total == 0:
+        # Trigger-driven snapshots (post-commit hook, sitecustomize atexit,
+        # manual) never run a test session. Saying "no tests collected"
+        # there reads like a failure; clarify it's a code-state snapshot.
+        if not trigger.startswith("pytest"):
+            return f"snapshot: code state captured (trigger={trigger}, no test run)"
         return "test-run: no tests collected"
     if result.passed == result.total and result.bundles_passing:
         return (f"test-run: {result.passed}/{result.total} passed -- "
@@ -78,7 +85,7 @@ def format_commit_message(
     artifact_hashes: Optional[Dict[str, Dict[str, str]]] = None,
 ) -> str:
     """Assemble the stable commit message format."""
-    summary = _summary_line(status, result, result.duration_seconds)
+    summary = _summary_line(status, result, result.duration_seconds, trigger)
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     files_str = ", ".join(files_changed[:10])  # cap; full list is in git diff
     if len(files_changed) > 10:

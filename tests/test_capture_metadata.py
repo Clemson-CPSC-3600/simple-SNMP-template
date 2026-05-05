@@ -119,6 +119,34 @@ def test_format_accepts_each_trigger():
         )
         assert f"trigger: {trig}" in msg
 
+def test_zero_tests_with_pytest_trigger_says_no_tests_collected():
+    """A pytest run that genuinely collected nothing keeps the existing wording."""
+    msg = metadata.format_commit_message(
+        session_id="abc", status="completed", result=metadata.TestResult(),
+        diff_added=0, diff_removed=0, files_changed=[],
+        hostname_hash="hh", trigger="pytest",
+    )
+    assert msg.startswith("test-run: no tests collected")
+
+
+def test_zero_tests_with_snapshot_trigger_uses_snapshot_wording():
+    """Trigger-driven snapshots (post-commit, sitecustomize, manual) must NOT
+    look like a failed test session. The summary line should mark them as
+    code-state captures, not as zero-test runs.
+    """
+    for trig in ("git_post_commit", "sitecustomize", "manual"):
+        msg = metadata.format_commit_message(
+            session_id="abc", status="completed", result=metadata.TestResult(),
+            diff_added=0, diff_removed=0, files_changed=[],
+            hostname_hash="hh", trigger=trig,
+        )
+        assert msg.startswith("snapshot: code state captured"), (
+            f"trigger={trig} produced wrong summary: {msg.splitlines()[0]!r}"
+        )
+        assert f"trigger={trig}" in msg.splitlines()[0]
+        assert "no tests collected" not in msg.splitlines()[0]
+
+
 def test_format_records_agent_session_when_provided():
     msg = metadata.format_commit_message(
         session_id="abc", status="completed", result=metadata.TestResult(),
