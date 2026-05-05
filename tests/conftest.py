@@ -18,6 +18,18 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _SESSION_CTX = None
 _BUNDLE_BY_NODEID: dict = {}
 
+# Pytest exit codes (see pytest.ExitCode). Translate these into a commit
+# status string so a session that never collected any tests is clearly
+# distinguishable from a successful zero-test "completed" run.
+_EXIT_STATUS = {
+    0: "completed",
+    1: "tests_failed",
+    2: "interrupted",
+    3: "internal_error",
+    4: "usage_error",
+    5: "no_tests_collected",
+}
+
 
 @pytest.fixture
 def tmp_git_repo_with_capture(tmp_path):
@@ -112,4 +124,9 @@ def pytest_sessionfinish(session, exitstatus):
                 nodeid = getattr(rep, "nodeid", "") or ""
                 bundle = _BUNDLE_BY_NODEID.get(nodeid, 1)
                 _SESSION_CTX.record_test(outcome=outcome, bundle=bundle)
-    capture.session_finish(_PROJECT_ROOT, _SESSION_CTX, status="completed")
+    try:
+        code = int(exitstatus)
+    except (TypeError, ValueError):
+        code = -1
+    status = _EXIT_STATUS.get(code, f"pytest_exit_{code}")
+    capture.session_finish(_PROJECT_ROOT, _SESSION_CTX, status=status)
