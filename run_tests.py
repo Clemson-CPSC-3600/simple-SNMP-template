@@ -85,19 +85,62 @@ RESET = "\033[0m"
 
 
 class BundleTestRunner:
-    def __init__(self, verbose=False, bundle=None, pytest_args=None, failed_only=False):
+    def __init__(
+        self,
+        verbose=False,
+        bundle=None,
+        pytest_args=None,
+        failed_only=False,
+        show_all=False,
+    ):
         self.root_dir = Path(__file__).parent.absolute()
         self.solution_dir = self.root_dir / "solution"
         self.src_dir = self.root_dir / "src"
         self.backup_dir = None
         self.verbose = verbose
         self.bundle = bundle
+        self.show_all = show_all
         self.pytest_args = list(pytest_args or [])
         self._capture_ctx = None
         self._pytest_proc = None
+        self._component_groups = self._load_component_groups()
 
         if failed_only:
             self.pytest_args.append("--lf")
+
+    def _load_component_groups(self):
+        """Read optional component_groups from project-template-config.json.
+
+        Schema (all fields optional; absent -> auto-group by filename):
+            "component_groups": [
+                {"file": "test_x.py", "label": "Protocol", "depends_on": []},
+                {"file": "test_y.py", "label": "Agent",
+                 "depends_on": ["test_x.py"]},
+                ...
+            ]
+
+        Returns a list preserving config order. Each entry has keys
+        file/label/depends_on. Returns [] on any parse error or absent key
+        so the runner falls back to alphabetical-by-file grouping.
+        """
+        path = self.root_dir / "project-template-config.json"
+        if not path.exists():
+            return []
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return []
+        raw = data.get("component_groups") or []
+        groups = []
+        for entry in raw:
+            if not isinstance(entry, dict) or "file" not in entry:
+                continue
+            groups.append({
+                "file": entry["file"],
+                "label": entry.get("label", entry["file"]),
+                "depends_on": list(entry.get("depends_on") or []),
+            })
+        return groups
 
     def _subprocess_env(self):
         """Return an env for pytest subprocesses with capture session vars
@@ -217,15 +260,23 @@ class BundleTestRunner:
         print("Backup cleaned up")
 
     def get_test_markers(self):
-        """Extract bundle and points markers by importing test modules.
+        """Extract bundle markers by importing test modules.
 
         Handles both top-level test_ functions and Test* classes with
         test_ methods. Class-level pytestmark decorators are inherited
         by the methods unless the method overrides them.
+
+        Only tests with an explicit @pytest.mark.bundle(N) decoration are
+        returned. Unmarked tests (typically template infrastructure -- the
+        capture system, orchestrator, codex ingest, preflight, etc.) are
+        omitted so they don't contribute to the student's grade. We also
+        track the count of unmarked test files so the runner can tell the
+        student "X infrastructure tests were skipped" instead of silently
+        dropping them.
         """
 
         def _resolve(obj, inherited=None):
-            bundle, points = 1, 0
+            bundle, points = None, 0
             marks = list(inherited or [])
             marks.extend(getattr(obj, "pytestmark", []))
             for mark in marks:
@@ -236,6 +287,7 @@ class BundleTestRunner:
             return bundle, points
 
         test_markers = {}
+        unmarked_count = 0
         tests_dir = self.root_dir / "tests"
 
         for test_file in tests_dir.glob("test_*.py"):
@@ -256,6 +308,9 @@ class BundleTestRunner:
 
                 if name.startswith("test_") and callable(obj):
                     bundle, points = _resolve(obj)
+                    if bundle is None:
+                        unmarked_count += 1
+                        continue
                     test_markers[f"{test_file.name}::{name}"] = {
                         "bundle": bundle,
                         "points": points,
@@ -272,6 +327,9 @@ class BundleTestRunner:
                         if not callable(method):
                             continue
                         bundle, points = _resolve(method, class_marks)
+                        if bundle is None:
+                            unmarked_count += 1
+                            continue
                         test_markers[f"{test_file.name}::{attr_name}"] = {
                             "bundle": bundle,
                             "points": points,
@@ -280,35 +338,49 @@ class BundleTestRunner:
                             ),
                         }
 
+        self._unmarked_count = unmarked_count
         return test_markers
 
     def get_selected_test_nodeids(self, test_markers):
-        """Return pytest node ids for the selected bundle, if any."""
-        if self.bundle is None:
-            return None
+        """Return pytest node ids for the active selection.
 
-        selected = [
-            metadata["nodeid"]
-            for metadata in test_markers.values()
-            if metadata["bundle"] == self.bundle
-        ]
+        Default (no --bundle): every test that carries a bundle marker.
+        Unmarked tests are filtered upstream in get_test_markers, so this
+        just reads off everything in test_markers.
+
+        --bundle N: filter further to tests in that bundle.
+        """
+        if self.bundle is None:
+            selected = [m["nodeid"] for m in test_markers.values()]
+        else:
+            selected = [
+                m["nodeid"] for m in test_markers.values()
+                if m["bundle"] == self.bundle
+            ]
         return selected or None
 
-    def build_pytest_command(self, test_nodeids=None):
-        """Build the pytest command for the current run."""
+    def build_pytest_command(self, test_nodeids):
+        """Build the pytest command for the current run.
+
+        test_nodeids must be a non-empty list -- the runner now always
+        passes an explicit selection (only @pytest.mark.bundle()-tagged
+        tests). Returns None when there is nothing graded to run; the
+        caller is expected to skip the pytest invocation in that case.
+
+        Quiet by default: pytest emits dots/Fs as tests run, and the JSON
+        report carries the failure detail we render afterwards. -v opts back
+        into the per-test PASSED/FAILED stream and inline tracebacks.
+        """
+        if not test_nodeids:
+            return None
+
         cmd = [sys.executable, "-m", "pytest"]
-
-        if test_nodeids:
-            cmd.extend(test_nodeids)
+        cmd.extend(test_nodeids)
+        cmd.extend(["--color=yes", "--strict-markers"])
+        if self.verbose:
+            cmd.extend(["-v", "--tb=short"])
         else:
-            cmd.append(str(self.root_dir / "tests"))
-
-        cmd.extend([
-            "-v",
-            "--tb=short",
-            "--color=yes",
-            "--strict-markers",
-        ])
+            cmd.extend(["-q", "--tb=no", "--no-header"])
         cmd.extend(self.pytest_args)
         return cmd
 
@@ -344,6 +416,9 @@ class BundleTestRunner:
         selected_tests = self.get_selected_test_nodeids(test_markers)
 
         cmd = self.build_pytest_command(selected_tests)
+        if cmd is None:
+            return 0, {1: [], 2: [], 3: []}
+
         cmd.extend([
             "--json-report",
             "--json-report-file=test_results.json",
@@ -367,12 +442,21 @@ class BundleTestRunner:
                     test_name = parts[-1] if len(parts) > 1 else "unknown"
                     test_class = parts[1] if len(parts) > 2 else None
 
-                    markers = test_markers.get(
-                        f"{filename}::{test_name}",
-                        {"bundle": 1, "points": 0},
-                    )
+                    markers = test_markers.get(f"{filename}::{test_name}")
+                    if markers is None:
+                        # Test wasn't picked up by our marker scan -- e.g.,
+                        # a parametrized variant whose name doesn't match
+                        # exactly. Skip rather than misclassify into Bundle 1.
+                        continue
                     bundle = markers["bundle"]
                     points = markers["points"]
+
+                    longrepr = ""
+                    for phase in ("setup", "call", "teardown"):
+                        phase_data = test.get(phase) or {}
+                        if phase_data.get("outcome") == "failed":
+                            longrepr = phase_data.get("longrepr") or ""
+                            break
 
                     bundles_data[bundle].append({
                         "file": filename,
@@ -380,11 +464,12 @@ class BundleTestRunner:
                         "name": test_name,
                         "passed": outcome == "passed",
                         "points": points,
+                        "longrepr": longrepr,
                     })
 
                     if self.verbose:
                         status_icon = "[PASS]" if outcome == "passed" else "[FAIL]"
-                        print(f"  {status_icon} Bundle {bundle}: {test_name} ({points} points)")
+                        print(f"  {status_icon} Bundle {bundle}: {test_name}")
             except Exception as exc:
                 if self.verbose:
                     print(f"Note: Could not parse JSON results: {exc}")
@@ -409,6 +494,9 @@ class BundleTestRunner:
             pass
 
         cmd = self.build_pytest_command(selected_tests)
+        if cmd is None:
+            return 0, {1: [], 2: [], 3: []}
+
         result = self.run_subprocess(cmd)
         bundles_data = self.parse_pytest_verbose_output(result.stdout, test_markers)
         return result.returncode, bundles_data
@@ -439,10 +527,9 @@ class BundleTestRunner:
             test_name = match.group(3)
             status = match.group(4)
 
-            metadata = test_markers.get(
-                f"{filename}::{test_name}",
-                {"bundle": 1, "points": 0},
-            )
+            metadata = test_markers.get(f"{filename}::{test_name}")
+            if metadata is None:
+                continue
             bundle = metadata["bundle"]
 
             bundles[bundle].append({
@@ -451,6 +538,7 @@ class BundleTestRunner:
                 "name": test_name,
                 "passed": status == "PASSED",
                 "points": metadata["points"],
+                "longrepr": "",
             })
 
             if self.verbose:
@@ -459,22 +547,178 @@ class BundleTestRunner:
 
         return bundles
 
+    def _summarize_longrepr(self, longrepr, max_len=140):
+        """Pull the most useful one-liner out of a pytest longrepr string.
+
+        Prefer pytest's `E   ...` error marker; fall back to the last line
+        containing 'assert' or 'Error:'; final fallback is the last non-empty
+        line. Truncated to max_len so the focus view stays scannable.
+        """
+        if not longrepr:
+            return ""
+        if not isinstance(longrepr, str):
+            longrepr = str(longrepr)
+        lines = [line.rstrip() for line in longrepr.splitlines() if line.strip()]
+        if not lines:
+            return ""
+        candidate = ""
+        for line in reversed(lines):
+            stripped = line.lstrip()
+            if stripped.startswith("E "):
+                candidate = stripped[2:].strip()
+                break
+        if not candidate:
+            for line in reversed(lines):
+                if "assert " in line or "Error:" in line:
+                    candidate = line.strip()
+                    break
+        if not candidate:
+            candidate = lines[-1].strip()
+        if len(candidate) > max_len:
+            candidate = candidate[: max_len - 1] + "…"
+        return candidate
+
+    def _build_component_groups(self, bundle_tests):
+        """Group a bundle's tests into components and order them.
+
+        Configured components (from project-template-config.json) come first
+        in declared order. Any test files not in the config get appended in
+        alphabetical order, each as its own group with its filename as label.
+
+        Returns a list of dicts: file, label, depends_on, tests, total, passed,
+        complete (bool). Only groups that contain at least one test in this
+        bundle are returned.
+        """
+        by_file = {}
+        for test in bundle_tests:
+            by_file.setdefault(test["file"], []).append(test)
+
+        groups = []
+        seen_files = set()
+
+        for entry in self._component_groups:
+            fname = entry["file"]
+            if fname not in by_file:
+                continue
+            tests = by_file[fname]
+            passed = sum(1 for t in tests if t["passed"])
+            groups.append({
+                "file": fname,
+                "label": entry["label"],
+                "depends_on": list(entry["depends_on"]),
+                "tests": tests,
+                "total": len(tests),
+                "passed": passed,
+                "complete": passed == len(tests),
+            })
+            seen_files.add(fname)
+
+        for fname in sorted(f for f in by_file if f not in seen_files):
+            tests = by_file[fname]
+            passed = sum(1 for t in tests if t["passed"])
+            groups.append({
+                "file": fname,
+                "label": fname,
+                "depends_on": [],
+                "tests": tests,
+                "total": len(tests),
+                "passed": passed,
+                "complete": passed == len(tests),
+            })
+
+        # Mark each group "locked" iff any depends_on group present in this
+        # bundle has a failure. Groups whose deps aren't in this bundle (or
+        # whose deps are all green) are unlocked.
+        status_by_file = {g["file"]: g for g in groups}
+        for group in groups:
+            blockers = []
+            for dep in group["depends_on"]:
+                dep_group = status_by_file.get(dep)
+                if dep_group is not None and not dep_group["complete"]:
+                    blockers.append(dep_group["label"])
+            group["locked"] = bool(blockers)
+            group["blockers"] = blockers
+
+        return groups
+
+    def _render_group_failures(self, group, indent="    "):
+        """Print each failed test in a group with a one-line assertion gist."""
+        for test in group["tests"]:
+            if test["passed"]:
+                continue
+            qualname = test["name"]
+            if test.get("class"):
+                qualname = f"{test['class']}::{test['name']}"
+            print(f"{indent}{RED}[FAIL]{RESET} {qualname}")
+            gist = self._summarize_longrepr(test.get("longrepr", ""))
+            if gist:
+                print(f"{indent}       {gist}")
+            print(f"{indent}       {BLUE}-> pytest {test['file']}::{qualname} -v{RESET}")
+
+    def _render_focus_bundle(self, groups, show_all):
+        """Render the body of the focus bundle: grouped, with sub-focus.
+
+        Sub-focus = first group that has failures AND is not locked. Only that
+        group's failures are listed in detail. Other failing groups collapse
+        to a one-line status with a hint. --all (show_all) bypasses sub-focus
+        and renders every failing group's failures.
+        """
+        sub_focus = next(
+            (g for g in groups if not g["complete"] and not g["locked"]),
+            None,
+        )
+
+        for group in groups:
+            label = group["label"]
+            count = f"{group['passed']}/{group['total']}"
+            if group["complete"]:
+                print(f"  {GREEN}[PASS]{RESET} {label}: {count}")
+                continue
+            if group["locked"] and not show_all:
+                deps = ", ".join(group["blockers"])
+                print(
+                    f"  {YELLOW}[--]{RESET}   {label}: {count} "
+                    f"(locked - finish {deps} first)"
+                )
+                continue
+
+            is_subfocus = group is sub_focus
+            tag = " <- start here" if is_subfocus and not show_all else ""
+            if group["locked"]:
+                deps = ", ".join(group["blockers"])
+                tag = f" (locked - normally cascades from {deps})"
+            print(f"  {RED}[FAIL]{RESET} {label}: {count}{tag}")
+
+            if show_all or is_subfocus:
+                self._render_group_failures(group)
+            else:
+                remaining = group["total"] - group["passed"]
+                print(
+                    f"         ({remaining} failing - rerun with --all to see)"
+                )
+
     def print_bundle_results(self, bundles_data):
-        """Print test results organized by bundle."""
+        """Print test results organized by bundle.
+
+        Default (no --all): the lowest incomplete bundle is the "focus";
+        within it, failures are grouped by component (test file), and only
+        the first unblocked failing component shows individual failure
+        detail. Higher bundles collapse to one-line "locked" rollups so
+        cascading failures don't drown out actionable signal.
+
+        --all: every bundle and every component renders full failure detail.
+        -v: keeps full pytest verbose output as well (handled in
+        build_pytest_command).
+        """
         bundle_status = {}
         for bundle in [1, 2, 3]:
             tests = bundles_data[bundle]
             total = len(tests)
             passed = sum(1 for test in tests if test["passed"])
-            total_points = sum(test.get("points", 0) for test in tests)
-            earned_points = sum(test.get("points", 0) for test in tests if test["passed"])
-
             bundle_status[bundle] = {
                 "total": total,
                 "passed": passed,
                 "complete": total > 0 and passed == total,
-                "total_points": total_points,
-                "earned_points": earned_points,
             }
 
         grade = "Not Passing"
@@ -498,14 +742,26 @@ class BundleTestRunner:
         print(f"{BOLD}SPECIFICATION GRADING RESULTS{RESET}")
         print("=" * 80)
         print(f"\n{BOLD}Grade Level Achieved: {grade_color}{grade}{RESET}")
-        print(f"{BOLD}Grade Score: {points}/100{RESET}  "
-              f"(specifications grading: bundle-completion based)\n")
+        print(f"{BOLD}Grade Score: {points}/100{RESET}\n")
+
+        skipped = getattr(self, "_unmarked_count", 0)
+        if skipped:
+            print(
+                f"  ({skipped} unmarked test{'s' if skipped != 1 else ''} "
+                "skipped - template infrastructure, not part of the grade)\n"
+            )
 
         bundle_names = {
             1: "Bundle 1 (Core Requirements)",
             2: "Bundle 2 (Intermediate Features)",
             3: "Bundle 3 (Advanced Features)",
         }
+
+        focus_bundle = next(
+            (b for b in (1, 2, 3)
+             if bundle_status[b]["total"] > 0 and not bundle_status[b]["complete"]),
+            None,
+        )
 
         for bundle in [1, 2, 3]:
             status = bundle_status[bundle]
@@ -517,31 +773,53 @@ class BundleTestRunner:
             completion = f"{status['passed']}/{status['total']}"
             percentage = (status["passed"] / status["total"] * 100) if status["total"] > 0 else 0
 
-            points_str = ""
-            if status["total_points"] > 0:
-                points_str = f" ({status['earned_points']}/{status['total_points']} pts)"
-
-            print(
+            header_line = (
                 f"{icon} {BOLD}{bundle_names[bundle]}{RESET}: "
-                f"{completion} tests passed ({percentage:.0f}%){points_str}"
+                f"{completion} tests passed ({percentage:.0f}%)"
             )
 
-            if not status["complete"] and self.verbose:
-                failed_tests = [test for test in bundles_data[bundle] if not test["passed"]]
-                if failed_tests:
-                    print(f"  {RED}Failed tests:{RESET}")
-                    for test in failed_tests:
-                        if test["class"]:
-                            print(f"    - {test['file']}::{test['class']}::{test['name']}")
-                        else:
-                            print(f"    - {test['file']}::{test['name']}")
+            # Spec grading: any bundle above the focus bundle is effectively
+            # locked, regardless of whether its own tests pass independently.
+            # A green Bundle 2 next to a red Bundle 1 misleads students into
+            # thinking they've earned credit they actually haven't.
+            locked_by_lower = (
+                focus_bundle is not None and bundle > focus_bundle
+            )
+            if locked_by_lower and not self.show_all:
+                lower_label = bundle_names[focus_bundle].split(" (")[0]
+                if status["complete"]:
+                    suffix = (
+                        f"(passing - won't count toward grade "
+                        f"until {lower_label} is complete)"
+                    )
+                else:
+                    suffix = f"(locked - finish {lower_label} first)"
+                print(
+                    f"{YELLOW}[--]{RESET} {BOLD}{bundle_names[bundle]}{RESET}: "
+                    f"{completion} tests passed {suffix}"
+                )
+                continue
+
+            if status["complete"]:
+                print(header_line)
+                continue
+
+            # Bundle is incomplete and not locked-by-lower (or --all) -- so
+            # this is the focus bundle. Render with component grouping.
+            print(header_line)
+            groups = self._build_component_groups(bundles_data[bundle])
+            if len(groups) <= 1 and not self.show_all:
+                # Single-file bundle: skip the grouping ceremony, just list
+                # failures with the same gist treatment.
+                if groups:
+                    self._render_group_failures(groups[0], indent="  ")
+            else:
+                self._render_focus_bundle(groups, show_all=self.show_all)
 
         print(f"\n{BOLD}Grading Requirements:{RESET}")
-        print("- You must pass ALL tests in a bundle to receive credit")
+        print("- Each bundle is pass/fail: you must pass ALL of its tests to clear it")
         print("- Higher bundles require completion of all lower bundles")
-        print("- Bundle 1 = 70 points (C), Bundle 1+2 = 85 points (B), All = 100 points (A)")
-        print("- Per-test \"(X/Y pts)\" beside each bundle is a progress indicator only;")
-        print("  the Grade Score is awarded by bundle completion, not by summing test points.")
+        print("- Pass Bundle 1 -> C, Bundles 1+2 -> B, all three -> A")
 
         print(f"\n{BOLD}Next Steps:{RESET}")
         if not bundle_status[1]["complete"]:
@@ -658,20 +936,20 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 This script runs tests organized by specification grading bundles:
-- Bundle 1: Core requirements (70 points)
-- Bundle 2: Intermediate features (85 points total)
-- Bundle 3: Advanced features (100 points total)
+- Bundle 1: Core requirements      -> grade C
+- Bundle 2: Intermediate features  -> grade B (when 1+2 pass)
+- Bundle 3: Advanced features      -> grade A (when 1+2+3 pass)
 
-Tests are assigned to bundles using pytest markers:
-  @pytest.mark.bundle(1)  # Assigns test to Bundle 1
-  @pytest.mark.points(10)  # Assigns point value to test
+Each bundle is pass/fail. Tests are assigned to bundles using pytest markers:
+  @pytest.mark.bundle(1)   # Assigns test to Bundle 1
 
-You must pass ALL tests in a bundle to receive credit for that level.
+You must pass ALL tests in a bundle to clear that level.
 
 Examples:
-  python run_tests.py
-  python run_tests.py -v
-  python run_tests.py --bundle 1
+  python run_tests.py            # auto-focus: details for the lowest incomplete bundle
+  python run_tests.py --all      # show every failure, every bundle
+  python run_tests.py --bundle 1 # run only Bundle 1 tests
+  python run_tests.py -v         # full pytest verbose output
   python run_tests.py -k basic
   python run_tests.py --failed
 
@@ -697,6 +975,17 @@ Note: If the 'solution' directory contains Python files, it will be tested autom
         help="Run only the tests that failed on the previous pytest run",
     )
     parser.add_argument(
+        "--all",
+        action="store_true",
+        dest="show_all",
+        help=(
+            "Show every failure in detail. Without this flag, the runner "
+            "auto-focuses on the lowest incomplete bundle (and, within it, "
+            "the first unblocked component) so cascading failures from "
+            "later bundles don't drown out actionable signal."
+        ),
+    )
+    parser.add_argument(
         "--skip-preflight",
         action="store_true",
         help=(
@@ -719,6 +1008,7 @@ Note: If the 'solution' directory contains Python files, it will be tested autom
         bundle=args.bundle,
         pytest_args=pytest_args,
         failed_only=args.failed,
+        show_all=args.show_all,
     )
     return runner.run()
 

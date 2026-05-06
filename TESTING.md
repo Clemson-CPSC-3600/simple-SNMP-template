@@ -23,16 +23,35 @@ project/                    ← You should be here
 ### Run Tests with Grading Script
 ```bash
 # From project root directory
-# See your current grade
+# See your current grade.
+# Default output auto-focuses on the lowest incomplete bundle and, within
+# it, the first component (test file) whose dependencies are passing -- so
+# you see actionable failures, not cascading symptoms.
 python run_tests.py
 
-# See detailed results
+# Show every failure across every bundle (escape hatch)
+python run_tests.py --all
+
+# Full pytest verbose output (per-test PASSED/FAILED + tracebacks)
 python run_tests.py -v
 
 # Test specific bundle
-python run_tests.py -m "bundle_C"  # C-level tests
-python run_tests.py -m "bundle_B"  # B-level tests
-python run_tests.py -m "bundle_A"  # A-level tests
+python run_tests.py --bundle 1   # Bundle 1 (Core, grade C)
+python run_tests.py --bundle 2   # Bundle 2 (Intermediate, grade B)
+python run_tests.py --bundle 3   # Bundle 3 (Advanced, grade A)
+```
+
+#### Which tests are graded?
+
+`run_tests.py` only collects tests that carry an explicit
+`@pytest.mark.bundle(1|2|3)` decorator. Unmarked tests (template
+infrastructure: capture system, orchestrator, codex ingest, preflight,
+etc.) are skipped entirely -- they don't run during grading and don't
+affect your score. If you ever need to run *every* test in `tests/`
+(including infrastructure), use raw pytest:
+
+```bash
+python -m pytest tests/ -v
 ```
 
 ### Run Tests with pytest
