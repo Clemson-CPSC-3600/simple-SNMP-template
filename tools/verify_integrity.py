@@ -19,6 +19,7 @@ TRACKED = [
     ".codex/config.toml",
     ".codex/hooks/__init__.py",
     ".codex/hooks/_common.py",
+    ".codex/hooks/_run.py",
     ".codex/hooks/permission_request.py",
     ".codex/hooks/post_tool_use.py",
     ".codex/hooks/pre_tool_use.py",

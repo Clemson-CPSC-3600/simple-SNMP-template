@@ -14,6 +14,7 @@ import argparse
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -104,6 +105,7 @@ class BundleTestRunner:
         self._capture_ctx = None
         self._pytest_proc = None
         self._component_groups = self._load_component_groups()
+        self._cached_test_markers = None
 
         if failed_only:
             self.pytest_args.append("--lf")
@@ -154,17 +156,24 @@ class BundleTestRunner:
     def _count_tests(self) -> int:
         """Pre-count the test suite so the watchdog deadline scales to reality.
 
-        Runs pytest --collect-only -q. Returns the integer count, or 10 on
-        any error (preserving the existing default). The probe costs about
-        half a second -- trivial next to a test run that may be minutes long.
+        Runs pytest --collect-only -q. When test markers exist, collects
+        only the marked nodeids so the count reflects what the runner will
+        actually grade -- otherwise the deadline would be sized for hundreds
+        of unmarked infrastructure tests that get filtered out, leaving the
+        watchdog window oversized for student work. Returns the integer
+        count, or 10 on any error (preserving the existing default). The
+        probe costs about half a second -- trivial next to a test run that
+        may be minutes long.
         """
-        import re
-
         probe_env = os.environ.copy()
         probe_env["CAPTURE_DISABLED"] = "1"
+        cmd = [sys.executable, "-m", "pytest", "--collect-only", "-q"]
+        markers = self.get_test_markers()
+        if markers:
+            cmd.extend(m["nodeid"] for m in markers.values())
         try:
             result = subprocess.run(
-                [sys.executable, "-m", "pytest", "--collect-only", "-q"],
+                cmd,
                 cwd=str(self.root_dir),
                 capture_output=True,
                 text=True,
@@ -273,7 +282,13 @@ class BundleTestRunner:
         track the count of unmarked test files so the runner can tell the
         student "X infrastructure tests were skipped" instead of silently
         dropping them.
+
+        Result is cached on self._cached_test_markers so callers (the
+        watchdog probe, the JSON path, the verbose path) share a single
+        scan -- module imports during the scan can be expensive.
         """
+        if self._cached_test_markers is not None:
+            return self._cached_test_markers
 
         def _resolve(obj, inherited=None):
             bundle, points = None, 0
@@ -290,7 +305,12 @@ class BundleTestRunner:
         unmarked_count = 0
         tests_dir = self.root_dir / "tests"
 
-        for test_file in tests_dir.glob("test_*.py"):
+        # rglob (not glob) so a project that organizes tests into
+        # subdirectories like tests/protocol/, tests/agent/, ... still has
+        # its markers picked up. Pytest collects recursively by default; if
+        # the marker scan didn't, every nested test would be silently
+        # treated as unmarked and excluded from grading.
+        for test_file in tests_dir.rglob("test_*.py"):
             spec = importlib.util.spec_from_file_location(
                 f"tests.{test_file.stem}", test_file
             )
@@ -339,6 +359,7 @@ class BundleTestRunner:
                         }
 
         self._unmarked_count = unmarked_count
+        self._cached_test_markers = test_markers
         return test_markers
 
     def get_selected_test_nodeids(self, test_markers):
@@ -385,7 +406,12 @@ class BundleTestRunner:
         return cmd
 
     def run_subprocess(self, cmd):
-        """Run a subprocess and print its output safely."""
+        """Run a subprocess and print its output safely.
+
+        cwd is pinned to self.root_dir so pytest's --json-report-file
+        (a relative path) lands where run_tests_with_json looks for it
+        regardless of where the runner was invoked from.
+        """
         print(f"\nRunning: {' '.join(cmd)}")
         print("=" * 80)
 
@@ -395,6 +421,7 @@ class BundleTestRunner:
             stderr=subprocess.PIPE,
             text=True,
             errors="replace",
+            cwd=str(self.root_dir),
             env=self._subprocess_env(),
         )
         self._pytest_proc = proc
@@ -442,11 +469,15 @@ class BundleTestRunner:
                     test_name = parts[-1] if len(parts) > 1 else "unknown"
                     test_class = parts[1] if len(parts) > 2 else None
 
-                    markers = test_markers.get(f"{filename}::{test_name}")
+                    # Strip @pytest.mark.parametrize suffix so all variants of
+                    # `test_foo[case_a]`, `test_foo[case_b]`, ... resolve to
+                    # the same marker entry under `test_foo`.
+                    base_name = re.sub(r"\[.*\]$", "", test_name)
+                    markers = test_markers.get(f"{filename}::{base_name}")
                     if markers is None:
-                        # Test wasn't picked up by our marker scan -- e.g.,
-                        # a parametrized variant whose name doesn't match
-                        # exactly. Skip rather than misclassify into Bundle 1.
+                        # Test wasn't picked up by our marker scan -- e.g., a
+                        # dynamically generated test or a name we couldn't
+                        # parse. Skip rather than misclassify into Bundle 1.
                         continue
                     bundle = markers["bundle"]
                     points = markers["points"]
@@ -503,8 +534,6 @@ class BundleTestRunner:
 
     def parse_pytest_verbose_output(self, output, test_markers):
         """Parse verbose pytest output to extract test results and markers."""
-        import re
-
         bundles = {1: [], 2: [], 3: []}
 
         ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")

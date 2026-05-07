@@ -3,6 +3,7 @@
 060389ed309d65500411dc250f23264357421a4c2a9621adaac006584199e802  .codex/config.toml
 283c9407c32ca4e0d3b5f1429aeade69e15f61397e70b2244fe8494ba6feeaa0  .codex/hooks/__init__.py
 f110344026319faea5e1fef55e2ceb0bd70dfe5b48709af20c7da56c6e74061b  .codex/hooks/_common.py
+2c239bc615c84ced519946d6323f5906d807d43d882ea004fac44e405791059a  .codex/hooks/_run.py
 a4601faabd1383bcfc7598c1420997762f50797ec6f8c020038f394d6b6894a0  .codex/hooks/permission_request.py
 cc6d03f3921dd4a6f2eb764e6376d903b6c6ead5392987a346e18a521b16ead3  .codex/hooks/post_tool_use.py
 6d700e653473f9be4268ac08ca8035f5fc3cab7d2a077472f8a174fa609437f2  .codex/hooks/pre_tool_use.py
