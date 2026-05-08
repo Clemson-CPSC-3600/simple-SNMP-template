@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -49,7 +50,17 @@ def push_auto_track_background(repo: Path, log_path: Path) -> None:
     """Detached push of refs/auto-track/snapshots. Mirrors v1 push_background
     pattern. Best-effort -- never raises (open() failures and Popen failures
     both caught locally; callers can rely on this being safe to invoke even
-    on a disk-full / permission-denied system)."""
+    on a disk-full / permission-denied system).
+
+    Pushes to two destinations atomically:
+      - refs/auto-track/snapshots (custom ref, hidden from GitHub UI)
+      - refs/heads/auto-track     (real branch, protectable via Ruleset)
+
+    The branch destination is what GitHub's Rulesets attach to so the
+    instructor-org ruleset can block force-pushes and deletions. --atomic
+    ensures both refs update or neither does, so a force-push rejected on
+    the protected branch can't leave the unprotected custom ref ahead.
+    """
     env = {**os.environ, **GIT_ENV}
     if run_git(["remote", "get-url", "origin"], cwd=repo, timeout=5.0).returncode != 0:
         return
@@ -71,8 +82,9 @@ def push_auto_track_background(repo: Path, log_path: Path) -> None:
             kwargs["start_new_session"] = True
         try:
             subprocess.Popen(
-                ["git", "push", "origin",
-                 f"{AUTO_TRACK_REF}:{AUTO_TRACK_REF}"],
+                ["git", "push", "--atomic", "origin",
+                 f"{AUTO_TRACK_REF}:{AUTO_TRACK_REF}",
+                 f"{AUTO_TRACK_REF}:refs/heads/auto-track"],
                 **kwargs,
             )
         except OSError:
@@ -131,7 +143,23 @@ def read_auto_track_tip(repo: Path) -> Optional[str]:
 
 
 def pick_first_parent(repo: Path) -> Optional[str]:
-    """Apply spec §6 step 5 dominance rules to choose first parent SHA."""
+    """Apply spec §6 step 5 dominance rules to choose first parent SHA.
+
+    On true divergence (neither tip is an ancestor of the other), silently
+    auto-recover: reset the local auto-track ref to origin and return origin.
+    The dropped local commits are recorded in .test-runs.log so the
+    instructor mirror can reconstruct what happened.
+
+    Rationale: the typical multi-machine student doesn't understand git and
+    doesn't read stderr/log warnings. Letting the local ref stay diverged
+    means every subsequent push fails as non-fast-forward, accumulating
+    snapshots that never reach origin and silently leaking process-tracking
+    data the instructor will see as a gap. Reset-to-origin trades local
+    snapshot continuity (which was already unsalvageable -- those commits
+    couldn't be pushed) for a working pipeline going forward. Student code
+    on `main` and the working tree are unaffected; only the auto-track ref
+    moves, and it's not checked out anywhere.
+    """
     local = read_auto_track_tip(repo)
     origin_result = run_git(["rev-parse", "--verify", AUTO_TRACK_ORIGIN_TIP_REF],
                             cwd=repo, timeout=5.0)
@@ -156,7 +184,28 @@ def pick_first_parent(repo: Path) -> Optional[str]:
         cwd=repo, timeout=5.0).returncode == 0
     if origin_in_local:
         return local  # local is ahead
-    return local  # divergence — local wins, push will surface non-FF
+
+    # True divergence — auto-recover by resetting local to origin.
+    # Record the dropped commits so the mirror can audit later.
+    dropped = run_git(
+        ["rev-list", f"{origin}..{local}"],
+        cwd=repo, timeout=5.0,
+    )
+    dropped_shas = dropped.stdout.split() if dropped.returncode == 0 else []
+    try:
+        with (repo / ".test-runs.log").open("a", encoding="utf-8") as f:
+            f.write(
+                f"[{time.strftime('%Y-%m-%dT%H:%M:%S')}] "
+                f"auto-track: divergence-recovered, "
+                f"reset local {local[:8]} -> origin {origin[:8]}, "
+                f"dropped {len(dropped_shas)} commits: "
+                f"{','.join(s[:8] for s in dropped_shas)}\n"
+            )
+    except OSError:
+        pass
+    run_git(["update-ref", AUTO_TRACK_REF, origin, local],
+            cwd=repo, timeout=5.0)
+    return origin
 
 
 def fetch_auto_track(repo: Path) -> Optional[str]:
