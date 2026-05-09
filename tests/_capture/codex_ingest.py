@@ -9,9 +9,18 @@ The realistic workflow is: student runs Codex (rollout mtime fixed), then
 LATER runs pytest. An mtime >= session_start filter would exclude every
 such rollout because the rollout was finalized before pytest started. The
 right semantic — "capture all Codex rollouts for this repo that aren't
-already captured" — is achieved by the cwd match plus the idempotency
-check below (destination file exists → skip). The session_started_at
-parameter is kept for API stability but is currently unused.
+already fully captured" — is achieved by the cwd match plus the
+size-aware idempotency check below (skip only when the destination already
+contains every byte the source has). The session_started_at parameter is
+kept for API stability but is currently unused.
+
+Why size-aware and not filename-only: Codex CLI 0.119+ (and the desktop
+Codex.app) reuse a single rollout file across multiple turns within one
+session. A pure ``dest.exists() → skip`` check freezes the captured copy
+at whatever size it had on first ingest, so every turn after the first is
+silently lost. Comparing dest size to source size lets us re-copy when
+the rollout has grown, while still no-oping for genuinely-unchanged
+sessions (idempotency on unchanged input is preserved).
 
 Contract: never raises. Returns the list of copied destination paths (possibly
 empty). Any error is swallowed and results in an empty list (or a shorter
@@ -97,10 +106,12 @@ def ingest_transcripts(repo: Path, session_started_at: float) -> List[Path]:
     Selection criteria:
       * rollout payload.cwd resolves to the same path as ``repo``
 
-    Idempotent: if a destination file already exists (from a prior run) it
-    is skipped and not re-reported as newly copied. Combined with the cwd
-    match, this gives "capture everything new since last pytest" without
-    needing to track mtimes across sessions.
+    Idempotent on unchanged input: if a destination file already exists
+    AND its size is at least the source size, the copy is skipped. If the
+    source has grown since the last ingest (the IDE / desktop Codex case
+    where one rollout file accumulates multiple turns), the source is
+    re-copied so the destination reflects the latest state. Returned list
+    contains only paths that were freshly written this call.
 
     ``session_started_at`` is accepted for API stability but unused — see
     the module docstring for why mtime-based filtering was removed.
@@ -131,8 +142,16 @@ def ingest_transcripts(repo: Path, session_started_at: float) -> List[Path]:
             except OSError:
                 return copied
             dest = dest_dir / src.name
-            if dest.exists():
+            try:
+                src_size = src.stat().st_size
+            except OSError:
                 continue
+            if dest.exists():
+                try:
+                    if dest.stat().st_size >= src_size:
+                        continue
+                except OSError:
+                    continue
             try:
                 shutil.copy2(src, dest)
                 copied.append(dest)

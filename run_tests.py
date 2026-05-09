@@ -71,6 +71,11 @@ def assert_in_venv() -> None:
             "  source venv/bin/activate   (macOS/Linux)\n"
             "  pip install -r requirements.txt\n"
             "\n"
+            "If you haven't already, copy the contents of template/ into src/\n"
+            "to begin working:\n"
+            "  cp -r template/. src/             (macOS/Linux)\n"
+            "  xcopy template\\* src\\ /E /I    (Windows)\n"
+            "\n"
             "Then re-run: python run_tests.py\n"
         )
         sys.exit(2)

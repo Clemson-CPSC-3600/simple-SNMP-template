@@ -12,11 +12,13 @@ from pathlib import Path
 from typing import List
 
 from . import AgentAdapter
+from .claude import ClaudeAdapter
 from .codex import CodexAdapter
+from .vscode_chat import VSCodeChatAdapter
 
 # Class objects, NOT instances. installed_adapters() instantiates each
 # one and runs is_present() before yielding it.
-_REGISTERED = (CodexAdapter,)
+_REGISTERED = (CodexAdapter, ClaudeAdapter, VSCodeChatAdapter)
 
 
 def installed_adapters(repo: Path) -> List[AgentAdapter]:

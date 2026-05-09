@@ -52,7 +52,7 @@ def test_codex_adapter_force_paths_include_trace_roots():
     """Codex force-stages trace/config paths and excludes auth.json."""
     adapter = CodexAdapter()
     assert adapter.force_paths() == [".ai-traces", ".codex"]
-    assert adapter.unstage_after() == [".codex/auth.json", ".codex/hooks/__pycache__"]
+    assert adapter.unstage_after() == [".codex/auth.json"]
 
 
 # --- Layer 2: snapshot_to_auto_track honors force_paths + unstage_after ---

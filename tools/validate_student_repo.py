@@ -70,13 +70,18 @@ def main() -> int:
             "tests/_capture/ai_traces.py",
             "tests/_capture/agent_adapters/__init__.py",
             "tests/_capture/agent_adapters/base.py",
+            "tests/_capture/agent_adapters/claude.py",
+            "tests/_capture/agent_adapters/claude_normalize.py",
             "tests/_capture/agent_adapters/codex.py",
             "tests/_capture/agent_adapters/codex_normalize.py",
             "tests/_capture/agent_adapters/registry.py",
+            "tests/_capture/agent_adapters/vscode_chat.py",
             "tests/_capture/audit.py",
             "tests/_capture/auth.py",
             "tests/_capture/capture.py",
+            "tests/_capture/claude_ingest.py",
             "tests/_capture/codex_ingest.py",
+            "tests/_capture/vscode_chat_ingest.py",
             "tests/_capture/git_ops.py",
             "tests/_capture/metadata.py",
             "tests/_capture/post_commit_entry.py",
@@ -94,8 +99,6 @@ def main() -> int:
             "AI_POLICY.md",
             ".ai-traces/external-attestation.txt",
             ".codex/config.toml",
-            ".codex/hooks/_common.py",
-            ".codex/hooks/stop.py",
         ]
         for rel in required_capture_files:
             if not (root / rel).exists():

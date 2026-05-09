@@ -24,7 +24,7 @@ Files under `src/`, `tests/`, and `.ai-traces/` are staged into the commit, alon
 - Your Python version and OS type
 - A one-way hash of your machine's hostname (the instructor cannot recover your hostname from the hash; it is only used to tell apart your home laptop from a lab machine in a pattern-of-use sense)
 
-Local AI-agent traces (`.ai-traces/**/*.jsonl`) are also captured when present. Codex is the first supported adapter. See [AI_POLICY.md](AI_POLICY.md) for the full AI policy.
+Local AI-agent traces (`.ai-traces/**/*.jsonl`) are also captured when present. Codex CLI sessions land under `.ai-traces/codex/`, Claude Code sessions under `.ai-traces/claude/`, and VS Code chat-panel sessions (GitHub Copilot Chat and similar) under `.ai-traces/vscode_chat/`. Each adapter pulls from the agent's per-user storage (`~/.codex/sessions/`, `~/.claude/projects/`, and VS Code's `workspaceStorage/<id>/chatSessions/`) and filters by the repo's path. The Codex and Claude adapters parse events into the merged `.ai-traces/interaction-stream.jsonl`; the VS Code chat adapter stores the raw session JSONL only because VS Code's mutation-log format changes between releases. See [AI_POLICY.md](AI_POLICY.md) for the full AI policy.
 
 **Nothing outside the project directory is captured. No credentials, no browsing history, no system information.**
 
@@ -33,8 +33,9 @@ Local AI-agent traces (`.ai-traces/**/*.jsonl`) are also captured when present. 
 - Files outside the allowlist above
 - Your hostname (only a hash)
 - Keystrokes, timing within a session, cursor position, or anything your editor sees
-- AI assistant interactions from tools without a local adapter (ChatGPT web, Codex cloud, Claude web, Copilot Chat, etc.). See [AI_POLICY.md](AI_POLICY.md); uncaptured tool use should be recorded in `.ai-traces/external-attestation.txt` (which is shipped pre-seeded — open it and add your entries, or write "no uncaptured AI use" if that's the case). Deleting or emptying that file is detected by the integrity check.
+- AI assistant interactions from tools without a local adapter (ChatGPT web, Codex cloud, Claude web, Cursor, etc.). Cursor in particular is NOT captured even though it's a VS Code fork — it stores chats in a SQLite `state.vscdb` rather than the VS Code chat-panel format the adapter reads. See [AI_POLICY.md](AI_POLICY.md); uncaptured tool use should be recorded in `.ai-traces/external-attestation.txt` (which is shipped pre-seeded — open it and add your entries, or write "no uncaptured AI use" if that's the case). Deleting or emptying that file is detected by the integrity check.
 - Your Codex OpenAI token (`.codex/auth.json` is gitignored).
+- Claude Code authentication credentials (`~/.claude/` lives outside the repo; only the per-project session JSONL under `~/.claude/projects/<repo-slug>/` is read, not credentials).
 
 ## Why this exists
 

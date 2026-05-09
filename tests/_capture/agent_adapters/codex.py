@@ -94,4 +94,4 @@ class CodexAdapter:
         return [self.transcripts_dir, ".codex"]
 
     def unstage_after(self) -> List[str]:
-        return [".codex/auth.json", ".codex/hooks/__pycache__"]
+        return [".codex/auth.json"]

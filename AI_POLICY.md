@@ -7,9 +7,26 @@ Clemson's site license. You are encouraged to use it as a tutor. You are
 ## What is captured
 
 Local AI-agent traces for sessions you start inside this repository are saved
-to `.ai-traces/` and committed to the auto-track snapshot ref. Codex is the
-first supported adapter; future tools can write the same unified stream. Your
-instructor can read these traces.
+to `.ai-traces/` and committed to the auto-track snapshot ref. Three
+adapters are currently supported:
+
+- **Codex CLI** (`.ai-traces/codex/`, sourced from `~/.codex/sessions/`).
+  Full transcripts contributed to the merged `interaction-stream.jsonl`.
+- **Claude Code** (`.ai-traces/claude/`, sourced from
+  `~/.claude/projects/`). Full transcripts contributed to the merged
+  stream.
+- **VS Code chat panel** (`.ai-traces/vscode_chat/`, sourced from VS Code's
+  own `workspaceStorage/<id>/chatSessions/`). This covers GitHub Copilot
+  Chat and any other extension that uses the built-in chat panel. The
+  raw session files are preserved as-is for audit; they are NOT parsed
+  into the merged stream because VS Code's internal mutation-log format
+  changes between releases. Your instructor reads the raw files when they
+  need a transcript.
+
+Any of these is fine to use. Codex and Claude Code write to the same
+unified `.ai-traces/interaction-stream.jsonl` so your instructor reads
+one merged transcript regardless of which assistant you chose; VS Code
+chat is captured in raw form alongside.
 
 **This is captured:**
 
@@ -42,12 +59,17 @@ instructor can read these traces.
 
 **This is NOT captured:**
 
-- Your OpenAI API token (`.codex/auth.json` is gitignored).
+- Your OpenAI API token (`.codex/auth.json` is gitignored). Claude Code
+  credentials live in `~/.claude/` outside the repo and are never read.
 - AI-agent sessions you run in directories outside this assignment.
 - AI-agent sessions you run in tools that are not locally captured here
-  (ChatGPT web, Codex cloud, Claude web, Copilot Chat, etc.). If you use
-  those for this course, paste or summarize the interaction in
-  `.ai-traces/external-attestation.txt` so your work is auditable.
+  (ChatGPT web, Codex cloud, Claude web, Cursor, etc.). Cursor is a
+  notable case: although it's a VS Code fork, its chat data lives in a
+  SQLite database (`state.vscdb`) rather than the VS Code chat-panel
+  format the local adapter understands, so Cursor sessions are NOT
+  captured. If you use any of these tools for this course, paste or
+  summarize the interaction in `.ai-traces/external-attestation.txt` so
+  your work is auditable.
 - The contents of branches not reachable from your current HEAD at
   test-run time.
 - Anything you do outside the course repository directory.
