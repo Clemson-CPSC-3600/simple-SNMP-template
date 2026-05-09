@@ -132,7 +132,7 @@ def test_codex_adapter_stage_paths_includes_codex_dirs():
 def test_codex_adapter_force_paths_and_secret_exclusion():
     adapter = CodexAdapter()
     assert adapter.force_paths() == [".ai-traces", ".codex"]
-    assert adapter.unstage_after() == [".codex/auth.json", ".codex/hooks/__pycache__"]
+    assert adapter.unstage_after() == [".codex/auth.json"]
 
 
 def test_codex_adapter_metadata_from_hook_payload():

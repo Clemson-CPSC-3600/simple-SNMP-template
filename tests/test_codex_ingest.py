@@ -2,9 +2,10 @@
 
 The module under test scans ``$CODEX_HOME/sessions/`` recursively for Codex
 rollout JSONL files, filters them by cwd match, and copies matches into
-``<repo>/.ai-traces/codex/raw/rollouts/``. Dedup is handled by the idempotency check
-(destination file exists → skip) rather than an mtime cutoff, because the
-realistic workflow writes the rollout BEFORE the pytest session starts.
+``<repo>/.ai-traces/codex/raw/rollouts/``. Dedup is size-aware: skip when the
+destination already holds every byte of the source, re-copy when the source
+has grown. We don't use an mtime cutoff because the realistic workflow
+writes the rollout BEFORE the pytest session starts.
 
 All fixture rollouts use the actual session-meta shape discovered in Task 1:
 ``{"type": "session_meta", "payload": {"id": sid, "cwd": cwd, ...}}``.
@@ -124,7 +125,7 @@ def test_ingest_ignores_rollouts_with_different_cwd(tmp_path, fake_codex_home):
     assert not (repo / ".ai-traces").exists()
 
 
-def test_ingest_is_idempotent_when_destination_exists(tmp_path, fake_codex_home):
+def test_ingest_is_idempotent_when_source_unchanged(tmp_path, fake_codex_home):
     repo = tmp_path / "repo"
     repo.mkdir()
     session_started_at = time.time() - 60
@@ -137,7 +138,39 @@ def test_ingest_is_idempotent_when_destination_exists(tmp_path, fake_codex_home)
     second = codex_ingest.ingest_transcripts(repo, session_started_at)
 
     assert len(first) == 1
-    assert second == []  # second call sees dest already exists, skips
+    assert second == []  # source size unchanged → skip
+
+
+def test_ingest_recopies_when_source_grew(tmp_path, fake_codex_home):
+    """Codex IDE / desktop append turns to a single rollout file across a
+    session. After the first ingest, the source keeps growing; subsequent
+    ingests must overwrite the destination so the latest turns are captured.
+    A pure ``dest.exists() → skip`` check freezes the captured copy at
+    whatever size it had on first ingest and silently loses every later turn.
+    """
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    session_started_at = time.time() - 60
+
+    src = _write_rollout(
+        fake_codex_home, sid="growing", cwd=str(repo), mtime=time.time() - 30,
+    )
+    first = codex_ingest.ingest_transcripts(repo, session_started_at)
+    assert len(first) == 1
+    dest = repo / ".ai-traces" / "codex" / "raw" / "rollouts" / src.name
+    initial_size = dest.stat().st_size
+
+    appended = {"type": "response_item", "payload": {"role": "assistant"}}
+    with src.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(appended) + "\n")
+    grown_size = src.stat().st_size
+    assert grown_size > initial_size
+
+    second = codex_ingest.ingest_transcripts(repo, session_started_at)
+    assert len(second) == 1, (
+        "Source rollout grew between ingests — destination must be refreshed."
+    )
+    assert dest.stat().st_size == grown_size
 
 
 def test_ingest_returns_empty_when_codex_home_missing(tmp_path, monkeypatch):

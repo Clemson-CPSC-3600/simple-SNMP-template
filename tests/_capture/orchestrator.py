@@ -2,9 +2,15 @@
 
 Called by:
     - tests/_capture/capture.py::session_finish (pytest trigger)        [Phase 3]
-    - .codex/hooks/stop.py (codex_stop trigger)                         [Plan 2]
     - .claude/hooks/stop.py (claude_code_stop trigger)                  [Plan 3]
     - python -m tests._capture snapshot (manual trigger)                [Task 2.5.7]
+
+Note on Codex: Codex 0.129+ requires interactive trust approval (TUI
+``/hooks`` slash-command) before any project-local hook will fire, and the
+non-interactive ``codex exec`` and current VS Code extension paths do not
+surface that prompt. Codex sessions are therefore captured exclusively via
+the pytest-trigger path — students get full coverage by running
+``python run_tests.py`` after each Codex session.
 
 See orchestrator spec §4.3 for step ordering. Never raises.
 """
