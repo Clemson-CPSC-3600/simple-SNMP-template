@@ -735,18 +735,17 @@ class BundleTestRunner:
                     f"         ({remaining} failing - rerun with --all to see)"
                 )
 
-    def print_bundle_results(self, bundles_data):
-        """Print test results organized by bundle.
+    # Path that downstream graders (github_grader.py in a specialized
+    # assignment template) read to learn the latest bundle outcome without
+    # re-running pytest. Gitignored under .test-run-state/.
+    STATUS_CACHE_RELATIVE = Path(".test-run-state") / "last_bundle_status.json"
 
-        Default (no --all): the lowest incomplete bundle is the "focus";
-        within it, failures are grouped by component (test file), and only
-        the first unblocked failing component shows individual failure
-        detail. Higher bundles collapse to one-line "locked" rollups so
-        cascading failures don't drown out actionable signal.
+    def compute_bundle_status(self, bundles_data):
+        """Return per-bundle pass/fail and overall grade, derived from bundles_data.
 
-        --all: every bundle and every component renders full failure detail.
-        -v: keeps full pytest verbose output as well (handled in
-        build_pytest_command).
+        Sole authority for "did bundle N pass?" -- every other consumer
+        (print_bundle_results, write_status_cache, downstream graders) calls
+        this so they cannot disagree.
         """
         bundle_status = {}
         for bundle in [1, 2, 3]:
@@ -760,21 +759,55 @@ class BundleTestRunner:
             }
 
         grade = "Not Passing"
-        grade_color = RED
         points = 0
-
         if bundle_status[1]["complete"]:
-            grade = "C"
-            grade_color = BLUE
-            points = 70
+            grade, points = "C", 70
             if bundle_status[2]["complete"]:
-                grade = "B"
-                grade_color = YELLOW
-                points = 85
+                grade, points = "B", 85
                 if bundle_status[3]["complete"]:
-                    grade = "A"
-                    grade_color = GREEN
-                    points = 100
+                    grade, points = "A", 100
+
+        return {"bundles": bundle_status, "grade": grade, "points": points}
+
+    def write_status_cache(self, status):
+        """Persist the last bundle status so downstream graders can grade
+        without re-running pytest. Best-effort; failures are non-fatal."""
+        cache_path = self.root_dir / self.STATUS_CACHE_RELATIVE
+        try:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            serializable = {
+                "bundles": {str(k): v for k, v in status["bundles"].items()},
+                "grade": status["grade"],
+                "points": status["points"],
+            }
+            cache_path.write_text(
+                json.dumps(serializable, indent=2), encoding="utf-8"
+            )
+        except OSError:
+            pass
+
+    def print_bundle_results(self, bundles_data):
+        """Print test results organized by bundle.
+
+        Default (no --all): the lowest incomplete bundle is the "focus";
+        within it, failures are grouped by component (test file), and only
+        the first unblocked failing component shows individual failure
+        detail. Higher bundles collapse to one-line "locked" rollups so
+        cascading failures don't drown out actionable signal.
+
+        --all: every bundle and every component renders full failure detail.
+        -v: keeps full pytest verbose output as well (handled in
+        build_pytest_command).
+        """
+        status = self.compute_bundle_status(bundles_data)
+        bundle_status = status["bundles"]
+        grade = status["grade"]
+        points = status["points"]
+        grade_color = {
+            "A": GREEN, "B": YELLOW, "C": BLUE, "Not Passing": RED,
+        }.get(grade, RED)
+
+        self.write_status_cache(status)
 
         print("\n" + "=" * 80)
         print(f"{BOLD}SPECIFICATION GRADING RESULTS{RESET}")

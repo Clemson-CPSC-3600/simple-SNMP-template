@@ -86,6 +86,20 @@ def _git_credential_helper(repo: Path) -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
+def _running_in_ci() -> bool:
+    """True when running on GitHub Actions (or another CI advertising CI=true).
+
+    Used to skip preflight checks that gate *student* setup steps which are
+    handled differently on CI: e.g. the credential helper check exists so a
+    student's `git push` of capture snapshots doesn't hang on a prompt; on CI
+    the checkout action installs an authenticated extraheader instead.
+    """
+    return (
+        os.environ.get("GITHUB_ACTIONS") == "true"
+        or os.environ.get("CI") == "true"
+    )
+
+
 def _capture_enabled(repo: Path) -> bool:
     """Mirror tests/_capture/capture._capture_enabled, sans env override.
 
@@ -129,7 +143,9 @@ def check_environment(repo: Path) -> List[str]:
 
     # Git checks are only relevant when capture is enabled (student mode).
     # Instructor copies of the template don't push, so don't gate them on
-    # credentials being configured.
+    # credentials being configured. CI runs (GitHub Classroom autograding)
+    # also skip the credential-helper check because the checkout action
+    # configures token auth via http.extraheader, not credential.helper.
     if (repo / ".git").exists() and _capture_enabled(repo):
         if _git_remote_url(repo) is None:
             failures.append(
@@ -137,7 +153,7 @@ def check_environment(repo: Path) -> List[str]:
                 "be uploaded.\n"
                 "    Run:  python tools/setup_credentials.py"
             )
-        if not _git_credential_helper(repo):
+        if not _git_credential_helper(repo) and not _running_in_ci():
             failures.append(
                 "Git credential helper is not configured. Pushes will fail "
                 "or hang.\n"

@@ -1,142 +1,99 @@
 #!/usr/bin/env python3
-"""
-GitHub Classroom Grader - Outputs bundle completion status for partial credit
-This script runs the tests and exits with specific codes for GitHub Classroom
-"""
+"""GitHub Classroom per-bundle grader.
 
-import subprocess
+Invoked by `.github/classroom/autograding.json` as `python github_grader.py N`
+for N in {1, 2, 3}. Exits 0 if all tests in bundles 1..N pass (specification
+grading: a bundle's credit requires every lower bundle complete), 1 otherwise.
+
+Score source of truth: `run_tests.BundleTestRunner.compute_bundle_status` --
+the same function that drives the local `python run_tests.py` display, so
+the Classroom score cannot disagree with what students see locally.
+
+Two paths to that data:
+  1. Cache hit -- the workflow's `python run_tests.py` step (which runs once
+     per push) wrote `.test-run-state/last_bundle_status.json`. We read it.
+  2. Cache miss -- run pytest ourselves via the shared runner. Used as a
+     fallback if the upstream step crashed or was removed.
+"""
+from __future__ import annotations
+
+import json
+import os
 import sys
-import re
 from pathlib import Path
 
-def strip_ansi(text):
-    """Remove ANSI color codes from text"""
-    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-    return ansi_escape.sub('', text)
+ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT))
 
-def run_tests_once():
-    """Run tests once and parse all results"""
-    try:
-        # Run the test script
-        result = subprocess.run(
-            [sys.executable, "run_tests.py"],
-            capture_output=True,
-            text=True,
-            timeout=60
+from run_tests import BundleTestRunner  # noqa: E402  (after sys.path tweak)
+
+# Outside CI we don't trust the cache: a student tinkering with their code
+# between runs would otherwise see a stale verdict. CI does one run per
+# checkout, so the cache is always fresh there.
+TRUST_CACHE = os.environ.get("GITHUB_ACTIONS") == "true"
+
+
+def load_status():
+    cache_path = ROOT / BundleTestRunner.STATUS_CACHE_RELATIVE
+    if TRUST_CACHE and cache_path.exists():
+        try:
+            data = json.loads(cache_path.read_text(encoding="utf-8"))
+            data["bundles"] = {int(k): v for k, v in data["bundles"].items()}
+            return data
+        except (OSError, json.JSONDecodeError, KeyError, ValueError):
+            pass
+
+    runner = BundleTestRunner()
+    _exit_code, bundles_data = runner.run_tests_standard()
+    status = runner.compute_bundle_status(bundles_data)
+    runner.write_status_cache(status)
+    return status
+
+
+def main(bundle_number: int) -> int:
+    status = load_status()
+    bundles = status["bundles"]
+    grade = status["grade"]
+
+    print(f"Checking Bundle {bundle_number}")
+    print("-" * 40)
+
+    info = bundles.get(bundle_number, {})
+    if info:
+        print(
+            f"Bundle {bundle_number}: "
+            f"{info.get('passed', 0)}/{info.get('total', 0)} tests passed"
         )
-        
-        # Remove ANSI color codes for easier parsing
-        output = strip_ansi(result.stdout)
-        
-        # Parse bundle results
-        bundles = {1: False, 2: False, 3: False}
-        bundle_info = {}
-        
-        # Look for lines like "✓ Bundle 1 (Core Requirements): 31/31 tests passed"
-        for line in output.split('\n'):
-            match = re.search(r'([✓✗])\s+Bundle\s+(\d+)\s+.*?:\s+(\d+)/(\d+)\s+tests\s+passed', line)
-            if match:
-                status = match.group(1)
-                bundle_num = int(match.group(2))
-                passed = int(match.group(3))
-                total = int(match.group(4))
-                
-                bundles[bundle_num] = (status == '✓' and passed == total)
-                bundle_info[bundle_num] = f"{passed}/{total} tests passed"
-        
-        # Also check grade level
-        grade = "Not Passing"
-        grade_match = re.search(r'Grade Level Achieved:\s+([A-C]|Not Passing)', output)
-        if grade_match:
-            grade = grade_match.group(1)
-        
-        # If we found bundles by parsing, trust that
-        # Otherwise, fall back to grade mapping
-        if not any(bundle_num in bundle_info for bundle_num in [1, 2, 3]):
-            if grade == 'A':
-                bundles = {1: True, 2: True, 3: True}
-                bundle_info = {1: "All tests passed", 2: "All tests passed", 3: "All tests passed"}
-            elif grade == 'B':
-                bundles = {1: True, 2: True, 3: False}
-                bundle_info = {1: "All tests passed", 2: "All tests passed", 3: "Not complete"}
-            elif grade == 'C':
-                bundles = {1: True, 2: False, 3: False}
-                bundle_info = {1: "All tests passed", 2: "Not complete", 3: "Not complete"}
-        
-        return bundles, bundle_info, grade, result.returncode
-        
-    except subprocess.TimeoutExpired:
-        return {1: False, 2: False, 3: False}, {}, "Timeout", 1
-    except Exception as e:
-        print(f"Error running tests: {e}")
-        return {1: False, 2: False, 3: False}, {}, "Error", 1
-
-def main(bundle_number):
-    """Check if a specific bundle is complete"""
-    
-    # Run tests once and cache results
-    bundles, bundle_info, grade, return_code = run_tests_once()
-    
-    # Print minimal, focused output
-    print(f"🧪 Checking Bundle {bundle_number}")
-    print("-" * 40)
-    
-    # Show bundle status
-    if bundle_number in bundle_info:
-        print(f"📊 Bundle {bundle_number}: {bundle_info[bundle_number]}")
     else:
-        print(f"📊 Bundle {bundle_number}: Status unknown")
-    
-    print(f"📈 Overall Grade: {grade}")
+        print(f"Bundle {bundle_number}: Status unknown")
+    print(f"Overall Grade: {grade}")
     print("-" * 40)
-    
-    # Determine pass/fail based on bundle requirements
-    if bundle_number == 1:
-        if bundles.get(1, False):
-            print(f"✅ Bundle 1 PASSED")
-            sys.exit(0)
-        else:
-            print(f"❌ Bundle 1 FAILED")
-            sys.exit(1)
-            
-    elif bundle_number == 2:
-        # Bundle 2 requires Bundle 1
-        if not bundles.get(1, False):
-            print(f"❌ Bundle 2 FAILED - Requires Bundle 1")
-            sys.exit(1)
-        elif bundles.get(2, False):
-            print(f"✅ Bundle 2 PASSED")
-            sys.exit(0)
-        else:
-            print(f"❌ Bundle 2 FAILED")
-            sys.exit(1)
-            
-    elif bundle_number == 3:
-        # Bundle 3 requires Bundles 1 and 2
-        if not bundles.get(1, False):
-            print(f"❌ Bundle 3 FAILED - Requires Bundle 1")
-            sys.exit(1)
-        elif not bundles.get(2, False):
-            print(f"❌ Bundle 3 FAILED - Requires Bundle 2")
-            sys.exit(1)
-        elif bundles.get(3, False):
-            print(f"✅ Bundle 3 PASSED")
-            sys.exit(0)
-        else:
-            print(f"❌ Bundle 3 FAILED")
-            sys.exit(1)
+
+    # Specification grading: bundle N is only awarded when 1..N all complete.
+    for required in range(1, bundle_number + 1):
+        if not bundles.get(required, {}).get("complete", False):
+            if required != bundle_number:
+                print(
+                    f"FAIL: Bundle {bundle_number} requires Bundle {required}"
+                )
+            else:
+                print(f"FAIL: Bundle {bundle_number}")
+            return 1
+
+    print(f"PASS: Bundle {bundle_number}")
+    return 0
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: python github_grader.py <bundle_number>")
         sys.exit(1)
-    
     try:
         bundle = int(sys.argv[1])
-        if bundle not in [1, 2, 3]:
-            print(f"Error: Bundle must be 1, 2, or 3 (got {bundle})")
-            sys.exit(1)
-        main(bundle)
     except ValueError:
         print("Error: Bundle number must be an integer")
         sys.exit(1)
+    if bundle not in (1, 2, 3):
+        print(f"Error: Bundle must be 1, 2, or 3 (got {bundle})")
+        sys.exit(1)
+    sys.exit(main(bundle))
