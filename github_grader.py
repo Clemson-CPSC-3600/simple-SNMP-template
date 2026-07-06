@@ -17,6 +17,8 @@ Two paths to that data:
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import sys
@@ -44,7 +46,15 @@ def load_status():
             pass
 
     runner = BundleTestRunner()
-    _exit_code, bundles_data = runner.run_tests_standard()
+    if TRUST_CACHE:
+        # Classroom50 shows stdout/stderr from this script inside a compact
+        # failure detail box. The underlying runner prints every selected
+        # pytest nodeid on a cache miss, which drowns out the useful verdict.
+        with contextlib.redirect_stdout(io.StringIO()):
+            with contextlib.redirect_stderr(io.StringIO()):
+                _exit_code, bundles_data = runner.run_tests_standard()
+    else:
+        _exit_code, bundles_data = runner.run_tests_standard()
     status = runner.compute_bundle_status(bundles_data)
     runner.write_status_cache(status)
     return status
